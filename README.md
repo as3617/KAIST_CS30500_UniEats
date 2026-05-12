@@ -102,3 +102,27 @@ The final implementation stack may change as the project evolves, but the SRS cu
 - OCR integration such as NAVER CLOVA OCR or Google Cloud Vision
 - Cloud deployment on AWS
 - Stateless API communication over HTTPS
+
+
+## Structure
+
+```text
+/
+├─ apps/
+│  ├─ frontend/
+│  └─ backend/
+├─ deploy/
+│  ├─ docker-compose.yml
+│  ├─ frontend/
+│  │  ├─ Dockerfile
+│  │  └─ config/
+│  │     ├─ frontend.env.example
+│  │     └─ nginx.conf
+│  └─ backend/
+│     ├─ Dockerfile
+│     └─ config/
+│        └─ backend.env.example
+├─ docs/
+├─ .gitignore
+└─ README.md
+```
