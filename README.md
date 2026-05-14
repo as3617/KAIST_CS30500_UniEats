@@ -103,6 +103,9 @@ The final implementation stack may change as the project evolves, but the SRS cu
 - Cloud deployment on AWS
 - Stateless API communication over HTTPS
 
+## Stacks
+ - Next.js
+ - NestJS
 
 ## Structure
 
