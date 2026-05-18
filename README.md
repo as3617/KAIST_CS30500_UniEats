@@ -94,35 +94,95 @@ Cafeteria managers who use the service to:
 
 ## Planned Technical Direction
 
-The final implementation stack may change as the project evolves, but the SRS currently assumes:
+The current development stack is:
 
-- Responsive web frontend
-- Backend API server
-- NoSQL database such as MongoDB
-- OCR integration such as NAVER CLOVA OCR or Google Cloud Vision
-- Cloud deployment on AWS
-- Stateless API communication over HTTPS
+- Frontend: Next.js
+- Backend: NestJS
+- Database: MongoDB
+- Reverse proxy: nginx
+- Container orchestration: Docker Compose
+
+The frontend and backend are developed as separate applications. In the deployment setup, nginx serves as the public entrypoint and proxies `/api/` requests to the NestJS backend.
+
+## Local Development
+
+Install workspace dependencies from the repository root:
+
+```bash
+npm install
+```
+
+Run the backend:
+
+```bash
+npm run dev:backend
+```
+
+Run the frontend:
+
+```bash
+npm run dev:frontend
+```
+
+The frontend runs on `http://localhost:3000` and rewrites `/api/*` requests to the backend at `http://localhost:4000` during local development.
+
+## Configuration Files
+
+- Root `package.json`: npm workspace and repository-level scripts.
+- `apps/frontend/package.json`: Next.js frontend dependencies and scripts.
+- `apps/backend/package.json`: NestJS backend dependencies and scripts.
+- `apps/backend/.env.example`: local backend development environment variables.
+- `deploy/.env.example`: Docker Compose environment variables, such as the exposed nginx host port.
+
+## Docker Development
+
+Start the full stack with nginx, frontend, backend, and MongoDB:
+
+```bash
+npm run docker:up
+```
+
+By default, nginx listens on `http://localhost:3000`.
+
+Request flow:
+
+```text
+Browser
+  └─ http://localhost:3000
+      ├─ /api/*  -> nginx -> NestJS backend
+      └─ /*      -> nginx -> Next.js frontend
+```
 
 
 ## Structure
 
 ```text
 /
+├─ package.json
 ├─ apps/
 │  ├─ frontend/
+│  │  ├─ pages/
+│  │  │  └─ index.js
+│  │  ├─ next.config.js
+│  │  └─ package.json
 │  └─ backend/
+│     ├─ src/
+│     │  ├─ app.module.ts
+│     │  ├─ main.ts
+│     │  └─ health/
+│     ├─ nest-cli.json
+│     └─ package.json
 ├─ deploy/
+│  ├─ .env.example
 │  ├─ docker-compose.yml
+│  ├─ nginx/
+│  │  └─ nginx.conf
 │  ├─ frontend/
-│  │  ├─ Dockerfile
-│  │  └─ config/
-│  │     ├─ frontend.env.example
-│  │     └─ nginx.conf
+│  │  └─ Dockerfile
 │  └─ backend/
-│     ├─ Dockerfile
-│     └─ config/
-│        └─ backend.env.example
+│     └─ Dockerfile
 ├─ docs/
+├─ .dockerignore
 ├─ .gitignore
 └─ README.md
 ```
