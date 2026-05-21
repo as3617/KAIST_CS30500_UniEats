@@ -88,8 +88,8 @@ export async function apiFetch<T>(
 
   if (!payload.success) {
     throw new ApiClientError(
-      payload.error.code,
-      payload.error.message,
+      payload.error?.code ?? "REQUEST_FAILED",
+      payload.error?.message ?? `Request failed (${response.status})`,
       response.status,
     );
   }
