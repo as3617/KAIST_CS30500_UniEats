@@ -130,9 +130,21 @@ The frontend runs on `http://localhost:3000` and rewrites `/api/*` requests to t
 
 - Root `package.json`: npm workspace and repository-level scripts.
 - `apps/frontend/package.json`: Next.js frontend dependencies and scripts.
+- `apps/frontend/.env.example`: frontend environment variables (mock API toggle, backend base URL).
 - `apps/backend/package.json`: NestJS backend dependencies and scripts.
 - `apps/backend/.env.example`: local backend development environment variables.
 - `deploy/.env.example`: Docker Compose environment variables, such as the exposed nginx host port.
+
+### Frontend mock API
+
+The frontend ships with in-app mock route handlers under `apps/frontend/src/app/api/*`
+that match the team17 API envelope. They are used while the NestJS backend is
+still being built so that pages can be developed independently.
+
+To enable them, copy `apps/frontend/.env.example` to `apps/frontend/.env.local`
+and keep `NEXT_PUBLIC_USE_MOCK=true`. Once the real backend is reachable, set it
+to `false` (or remove the variable) to restore the `/api/*` -> backend rewrite
+configured in `apps/frontend/next.config.js`.
 
 ## Docker Development
 
@@ -161,9 +173,14 @@ Browser
 ├─ package.json
 ├─ apps/
 │  ├─ frontend/
-│  │  ├─ pages/
-│  │  │  └─ index.js
+│  │  ├─ src/
+│  │  │  ├─ app/           # App Router routes, including mock /api handlers
+│  │  │  ├─ components/    # Shared and shadcn/ui components
+│  │  │  ├─ lib/           # API client, auth storage, validation, date helpers
+│  │  │  ├─ mocks/         # Fixture data + response helpers
+│  │  │  └─ types/         # Shared enums, API envelope, domain models
 │  │  ├─ next.config.js
+│  │  ├─ tailwind.config.ts
 │  │  └─ package.json
 │  └─ backend/
 │     ├─ src/
