@@ -3,12 +3,13 @@ import type { NextRequest } from "next/server";
 import { proxyToBackend, shouldUseMockApi } from "../_utils";
 import { mockMenuServings, mockUser } from "@/mocks/data";
 import { okJson } from "@/mocks/respond";
-import type { AllergyCode, MenuServing } from "@/types";
+import type { AllergyCode, DietaryLabelCode, MenuServing } from "@/types";
 
 type Query = {
   date?: string | null;
   cafeteriaId?: string | null;
   category?: string | null;
+  dietaryLabel?: string | null;
   mealTime?: string | null;
   q?: string | null;
   hideAllergyConflicts?: string | null;
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     date: sp.get("date"),
     cafeteriaId: sp.get("cafeteriaId"),
     category: sp.get("category"),
+    dietaryLabel: sp.get("dietaryLabel"),
     mealTime: sp.get("mealTime"),
     q: sp.get("q")?.toLowerCase() ?? null,
     hideAllergyConflicts: sp.get("hideAllergyConflicts"),
@@ -54,6 +56,11 @@ export async function GET(request: NextRequest) {
   }
   if (query.category) {
     filtered = filtered.filter((m) => m.meal.category === query.category);
+  }
+  if (query.dietaryLabel) {
+    filtered = filtered.filter((m) =>
+      m.meal.dietaryLabels.includes(query.dietaryLabel as DietaryLabelCode),
+    );
   }
   if (query.mealTime) {
     filtered = filtered.filter((m) => m.mealTime === query.mealTime);

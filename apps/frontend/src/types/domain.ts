@@ -113,6 +113,15 @@ export type MenuServing = {
   allergyWarning?: AllergyWarning;
 };
 
+export type MenuServingDetail = Omit<MenuServing, "cafeteria" | "meal"> & {
+  stock?: number;
+  cafeteria: Pick<
+    Cafeteria,
+    "id" | "name" | "description" | "location" | "openingHours"
+  >;
+  meal: Meal;
+};
+
 export type DetailRatings = {
   taste: number;
   price: number;
