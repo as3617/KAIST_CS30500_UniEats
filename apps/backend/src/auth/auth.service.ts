@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -63,6 +64,14 @@ export interface RefreshBody {
 
 export interface TokenBody {
   refreshToken?: string;
+}
+
+export interface AuthenticatedUser {
+  id: string;
+  email: string;
+  nickname: string;
+  role: UserRole;
+  isEmailVerified: boolean;
 }
 
 type AccessTokenPayload = {
@@ -231,11 +240,22 @@ export class AuthService {
   }
 
   async getMe(authorization?: string) {
+    return this.requireUser(authorization);
+  }
+
+  async requireUser(
+    authorization?: string,
+    options: { requireEmailVerified?: boolean } = {},
+  ): Promise<AuthenticatedUser> {
     const payload = this.verifyAccessToken(authorization);
     const user = await this.userModel.findById(payload.sub).exec();
 
     if (!user) {
       throw new UnauthorizedException("invalid access token");
+    }
+
+    if (options.requireEmailVerified && !user.isEmailVerified) {
+      throw new ForbiddenException("email verification required");
     }
 
     return this.toAuthUser(user);
@@ -395,7 +415,7 @@ export class AuthService {
     return createHash("sha256").update(token).digest("hex");
   }
 
-  private toAuthUser(user: User & { _id: Types.ObjectId }) {
+  private toAuthUser(user: User & { _id: Types.ObjectId }): AuthenticatedUser {
     return {
       id: user._id.toString(),
       email: user.email,
