@@ -154,13 +154,13 @@ Start the full stack with nginx, frontend, backend, and MongoDB:
 npm run docker:up
 ```
 
-By default, nginx listens on `http://localhost:3000`.
+By default, nginx listens on `http://localhost`.
 
 Request flow:
 
 ```text
 Browser
-  └─ http://localhost:3000
+  └─ http://localhost
       ├─ /api/*  -> nginx -> NestJS backend
       └─ /*      -> nginx -> Next.js frontend
 ```

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { proxyToBackend, shouldUseMockApi } from "../../_utils";
 import { mockUser } from "@/mocks/data";
 import { errorJson, okJson } from "@/mocks/respond";
 import { isKaistEmail } from "@/lib/validation";
@@ -11,6 +12,10 @@ type LoginBody = {
 };
 
 export async function POST(request: NextRequest) {
+  if (!shouldUseMockApi()) {
+    return proxyToBackend(request);
+  }
+
   const body = (await request.json().catch(() => null)) as LoginBody | null;
 
   if (!body?.email || !body.password) {

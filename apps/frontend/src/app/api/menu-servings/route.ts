@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { proxyToBackend, shouldUseMockApi } from "../_utils";
 import { mockMenuServings, mockUser } from "@/mocks/data";
 import { okJson } from "@/mocks/respond";
 import type { AllergyCode, MenuServing } from "@/types";
@@ -16,6 +17,10 @@ type Query = {
 };
 
 export async function GET(request: NextRequest) {
+  if (!shouldUseMockApi()) {
+    return proxyToBackend(request);
+  }
+
   const sp = request.nextUrl.searchParams;
   const query: Query = {
     date: sp.get("date"),
