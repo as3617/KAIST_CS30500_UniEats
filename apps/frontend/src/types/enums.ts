@@ -103,3 +103,22 @@ export const CATEGORY_LABELS: Record<CategoryCode, string> = {
   BEVERAGE: "Beverage",
   OTHER: "Other",
 };
+
+export const DIETARY_LABELS: Record<DietaryLabelCode, string> = {
+  HALAL: "Halal",
+  VEGETARIAN: "Vegetarian",
+  VEGAN: "Vegan",
+  PESCATARIAN: "Pescatarian",
+  LACTO_VEGETARIAN: "Lacto vegetarian",
+  OVO_VEGETARIAN: "Ovo vegetarian",
+  LACTO_OVO_VEGETARIAN: "Lacto-ovo vegetarian",
+  NO_PORK: "No pork",
+  NO_BEEF: "No beef",
+};
+
+export const MEAL_TIME_LABELS: Record<MealTime, string> = {
+  BREAKFAST: "Breakfast",
+  LUNCH: "Lunch",
+  DINNER: "Dinner",
+  ALL_DAY: "All day",
+};
