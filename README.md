@@ -165,6 +165,9 @@ Browser
       └─ /*      -> nginx -> Next.js frontend
 ```
 
+## Stacks
+ - Next.js
+ - NestJS
 
 ## Structure
 
