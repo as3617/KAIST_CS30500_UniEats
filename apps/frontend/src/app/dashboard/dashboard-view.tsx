@@ -154,6 +154,9 @@ export function DashboardView() {
               <span className="text-sm text-muted-foreground">
                 Signed in as <span className="font-medium text-foreground">{user.nickname}</span>
               </span>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/my-page">My Page</Link>
+              </Button>
               <Button variant="outline" size="sm" onClick={handleSignOut}>
                 Sign out
               </Button>

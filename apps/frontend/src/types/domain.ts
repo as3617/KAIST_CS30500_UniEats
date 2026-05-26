@@ -31,6 +31,8 @@ export type User = {
   };
 };
 
+export type UserProfile = Omit<User, "isEmailVerified">;
+
 export type TimeRange = {
   open: string;
   close: string;
