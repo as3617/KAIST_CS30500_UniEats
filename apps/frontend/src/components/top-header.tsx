@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, MapPin, User } from "lucide-react";
+import { Home, MapPinned, User } from "lucide-react";
 
 const navLinks = [
   { href: "/dashboard", icon: Home, label: "Home" },
-  { href: "/campus-map", icon: MapPin, label: "Map" },
+  { href: "/campus-map", icon: MapPinned, label: "Map" },
   { href: "/my-page", icon: User, label: "My Page" },
 ];
 
@@ -16,7 +16,8 @@ export function TopHeader() {
   return (
     <header className="sticky top-0 z-50 bg-background border-b border-border">
       <div className="flex items-center justify-between h-14 px-6 max-w-5xl mx-auto">
-        <Link href="/dashboard" className="text-lg font-bold tracking-tight">
+        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+          <MapPinned className="h-5 w-5 text-primary" />
           UniEats
         </Link>
 
