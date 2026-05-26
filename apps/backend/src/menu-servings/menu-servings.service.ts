@@ -4,9 +4,11 @@ import { Model, Types } from "mongoose";
 import { PaginatedData } from "../common/api-response";
 import { toObjectId } from "../common/object-id";
 import { parsePagination } from "../common/pagination";
+import { AuthService } from "../auth/auth.service";
 import { Cafeteria } from "../cafeterias/schemas/cafeteria.schema";
 import { Meal } from "../meals/schemas/meal.schema";
-import { MenuServingStatus } from "../common/enums";
+import { AllergyCode, MenuServingStatus } from "../common/enums";
+import { User } from "../users/schemas/user.schema";
 import { MenuServing } from "./schemas/menu-serving.schema";
 
 export interface MenuServingListQuery {
@@ -30,13 +32,18 @@ export class MenuServingsService {
     private readonly mealModel: Model<Meal>,
     @InjectModel(Cafeteria.name)
     private readonly cafeteriaModel: Model<Cafeteria>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<User>,
+    private readonly authService: AuthService,
   ) {}
 
   async findAll(
     query: MenuServingListQuery,
+    authorization?: string,
   ): Promise<PaginatedData<Record<string, unknown>>> {
+    const viewerAllergies = await this.resolveViewerAllergies(authorization);
     const { page, limit, skip } = parsePagination(query as Record<string, unknown>);
-    const filter = await this.buildServingFilter(query);
+    const filter = await this.buildServingFilter(query, viewerAllergies);
     const mealIdFilter = filter.mealId as { $in?: Types.ObjectId[] } | undefined;
 
     if (mealIdFilter?.$in?.length === 0) {
@@ -63,14 +70,15 @@ export class MenuServingsService {
     ]);
 
     return {
-      items: items.map((serving) => this.toResponse(serving)),
+      items: items.map((serving) => this.toResponse(serving, viewerAllergies)),
       page,
       limit,
       total,
     };
   }
 
-  async findById(menuServingId: string) {
+  async findById(menuServingId: string, authorization?: string) {
+    const viewerAllergies = await this.resolveViewerAllergies(authorization);
     const _id = toObjectId(menuServingId, "menuServingId");
     const serving = await this.menuServingModel
       .findOne({ _id, status: { $ne: MenuServingStatus.HIDDEN } })
@@ -90,10 +98,13 @@ export class MenuServingsService {
       throw new NotFoundException("menu serving not found");
     }
 
-    return this.toResponse(serving);
+    return this.toResponse(serving, viewerAllergies);
   }
 
-  private async buildServingFilter(query: MenuServingListQuery): Promise<Record<string, unknown>> {
+  private async buildServingFilter(
+    query: MenuServingListQuery,
+    viewerAllergies: AllergyCode[] | null,
+  ): Promise<Record<string, unknown>> {
     const filter: Record<string, unknown> = {
       status: { $ne: MenuServingStatus.HIDDEN },
     };
@@ -119,7 +130,7 @@ export class MenuServingsService {
       filter.mealTime = query.mealTime.trim();
     }
 
-    const mealFilter = this.buildMealFilter(query);
+    const mealFilter = this.buildMealFilter(query, viewerAllergies);
     if (Object.keys(mealFilter).length > 0) {
       const meals = await this.mealModel.find(mealFilter).select("_id").lean().exec();
       filter.mealId = { $in: meals.map((meal) => meal._id as Types.ObjectId) };
@@ -128,7 +139,10 @@ export class MenuServingsService {
     return filter;
   }
 
-  private buildMealFilter(query: MenuServingListQuery): Record<string, unknown> {
+  private buildMealFilter(
+    query: MenuServingListQuery,
+    viewerAllergies: AllergyCode[] | null,
+  ): Record<string, unknown> {
     const filter: Record<string, unknown> = {};
 
     if (query.q?.trim()) {
@@ -143,14 +157,21 @@ export class MenuServingsService {
       filter.dietaryLabels = query.dietaryLabel.trim();
     }
 
+    if (
+      query.hideAllergyConflicts === "true" &&
+      viewerAllergies &&
+      viewerAllergies.length > 0
+    ) {
+      filter.allergens = { $nin: viewerAllergies };
+    }
+
     return filter;
   }
 
-  private toResponse(serving: any) {
+  private toResponse(serving: any, viewerAllergies: AllergyCode[] | null) {
     const meal = serving.mealId;
     const cafeteria = serving.cafeteriaId;
-
-    return {
+    const response: Record<string, unknown> = {
       id: serving._id.toString(),
       date: serving.date,
       mealTime: serving.mealTime,
@@ -161,10 +182,48 @@ export class MenuServingsService {
       verifiedReviewCount: serving.verifiedReviewCount,
       cafeteria: this.toCafeteriaSummary(cafeteria),
       meal: this.toMealSummary(meal),
-      allergyWarning: {
+    };
+
+    if (viewerAllergies) {
+      response.allergyWarning = this.buildAllergyWarning(meal, viewerAllergies);
+    }
+
+    return response;
+  }
+
+  private async resolveViewerAllergies(
+    authorization?: string,
+  ): Promise<AllergyCode[] | null> {
+    if (!authorization?.trim()) {
+      return null;
+    }
+
+    const currentUser = await this.authService.requireUser(authorization);
+    const user = await this.userModel
+      .findById(currentUser.id)
+      .select("dietaryProfile.allergies")
+      .lean()
+      .exec();
+
+    return user?.dietaryProfile?.allergies ?? [];
+  }
+
+  private buildAllergyWarning(meal: any, viewerAllergies: AllergyCode[]) {
+    if (!meal || meal instanceof Types.ObjectId || viewerAllergies.length === 0) {
+      return {
         hasConflict: false,
         matchedAllergens: [],
-      },
+      };
+    }
+
+    const viewerAllergySet = new Set(viewerAllergies);
+    const matchedAllergens = ((meal.allergens ?? []) as AllergyCode[]).filter(
+      (allergen) => viewerAllergySet.has(allergen),
+    );
+
+    return {
+      hasConflict: matchedAllergens.length > 0,
+      matchedAllergens,
     };
   }
 
