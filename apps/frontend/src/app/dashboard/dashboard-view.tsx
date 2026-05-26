@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Filter, MapPinned, Search, X } from "lucide-react";
+import { AlertTriangle, Filter, Search, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -149,20 +149,11 @@ export function DashboardView() {
           <h1 className="text-3xl font-semibold tracking-tight">Cafeteria menu</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/campus-map">
-              <MapPinned className="h-4 w-4" />
-              Map
-            </Link>
-          </Button>
           {user ? (
             <>
               <span className="text-sm text-muted-foreground">
                 Signed in as <span className="font-medium text-foreground">{user.nickname}</span>
               </span>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/my-page">My Page</Link>
-              </Button>
               <Button variant="outline" size="sm" onClick={handleSignOut}>
                 Sign out
               </Button>
