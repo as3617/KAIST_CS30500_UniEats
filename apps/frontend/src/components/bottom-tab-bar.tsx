@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, MapPin, User } from "lucide-react";
+import { Home, MapPinned, User } from "lucide-react";
 
 const tabs = [
-  { href: "/campus-map", icon: MapPin },
+  { href: "/campus-map", icon: MapPinned },
   { href: "/dashboard", icon: Home },
   { href: "/my-page", icon: User },
 ] as const;
