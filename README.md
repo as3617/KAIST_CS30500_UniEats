@@ -94,14 +94,76 @@ Cafeteria managers who use the service to:
 
 ## Planned Technical Direction
 
-The final implementation stack may change as the project evolves, but the SRS currently assumes:
+The current development stack is:
 
-- Responsive web frontend
-- Backend API server
-- NoSQL database such as MongoDB
-- OCR integration such as NAVER CLOVA OCR or Google Cloud Vision
-- Cloud deployment on AWS
-- Stateless API communication over HTTPS
+- Frontend: Next.js
+- Backend: NestJS
+- Database: MongoDB
+- Reverse proxy: nginx
+- Container orchestration: Docker Compose
+
+The frontend and backend are developed as separate applications. In the deployment setup, nginx serves as the public entrypoint and proxies `/api/` requests to the NestJS backend.
+
+## Local Development
+
+Install workspace dependencies from the repository root:
+
+```bash
+npm install
+```
+
+Run the backend:
+
+```bash
+npm run dev:backend
+```
+
+Run the frontend:
+
+```bash
+npm run dev:frontend
+```
+
+The frontend runs on `http://localhost:3000` and rewrites `/api/*` requests to the backend at `http://localhost:4000` during local development.
+
+## Configuration Files
+
+- Root `package.json`: npm workspace and repository-level scripts.
+- `apps/frontend/package.json`: Next.js frontend dependencies and scripts.
+- `apps/frontend/.env.example`: frontend environment variables (mock API toggle, backend base URL).
+- `apps/backend/package.json`: NestJS backend dependencies and scripts.
+- `apps/backend/.env.example`: local backend development environment variables.
+- `deploy/.env.example`: Docker Compose environment variables, such as the exposed nginx host port.
+
+### Frontend mock API
+
+The frontend ships with in-app mock route handlers under `apps/frontend/src/app/api/*`
+that match the team17 API envelope. They are used while the NestJS backend is
+still being built so that pages can be developed independently.
+
+To enable them, copy `apps/frontend/.env.example` to `apps/frontend/.env.local`
+and keep `NEXT_PUBLIC_USE_MOCK=true`. Once the real backend is reachable, set it
+to `false` (or remove the variable) to restore the `/api/*` -> backend rewrite
+configured in `apps/frontend/next.config.js`.
+
+## Docker Development
+
+Start the full stack with nginx, frontend, backend, and MongoDB:
+
+```bash
+npm run docker:up
+```
+
+By default, nginx listens on `http://localhost`.
+
+Request flow:
+
+```text
+Browser
+  └─ http://localhost
+      ├─ /api/*  -> nginx -> NestJS backend
+      └─ /*      -> nginx -> Next.js frontend
+```
 
 ## Stacks
  - Next.js
@@ -111,21 +173,36 @@ The final implementation stack may change as the project evolves, but the SRS cu
 
 ```text
 /
+├─ package.json
 ├─ apps/
 │  ├─ frontend/
+│  │  ├─ src/
+│  │  │  ├─ app/           # App Router routes, including mock /api handlers
+│  │  │  ├─ components/    # Shared and shadcn/ui components
+│  │  │  ├─ lib/           # API client, auth storage, validation, date helpers
+│  │  │  ├─ mocks/         # Fixture data + response helpers
+│  │  │  └─ types/         # Shared enums, API envelope, domain models
+│  │  ├─ next.config.js
+│  │  ├─ tailwind.config.ts
+│  │  └─ package.json
 │  └─ backend/
+│     ├─ src/
+│     │  ├─ app.module.ts
+│     │  ├─ main.ts
+│     │  └─ health/
+│     ├─ nest-cli.json
+│     └─ package.json
 ├─ deploy/
+│  ├─ .env.example
 │  ├─ docker-compose.yml
+│  ├─ nginx/
+│  │  └─ nginx.conf
 │  ├─ frontend/
-│  │  ├─ Dockerfile
-│  │  └─ config/
-│  │     ├─ frontend.env.example
-│  │     └─ nginx.conf
+│  │  └─ Dockerfile
 │  └─ backend/
-│     ├─ Dockerfile
-│     └─ config/
-│        └─ backend.env.example
+│     └─ Dockerfile
 ├─ docs/
+├─ .dockerignore
 ├─ .gitignore
 └─ README.md
 ```
