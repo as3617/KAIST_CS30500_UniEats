@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Save, ShieldAlert } from "lucide-react";
+import { ArrowLeft, ChevronRight, Save, ShieldAlert, Star } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -138,24 +137,29 @@ export function ProfileView() {
 
       <header className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">My Page</p>
-        <h1 className="text-3xl font-semibold tracking-tight">Dietary profile</h1>
-        <p className="text-sm text-muted-foreground">
-          Configure allergy warnings and meal preferences for safer menu discovery.
-        </p>
+        <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
       </header>
 
       <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <CardTitle>{profile.nickname}</CardTitle>
-              <CardDescription>{profile.email}</CardDescription>
-            </div>
-            <Badge variant="secondary">
-              {profile.reviewStats.verifiedReviewCount} verified reviews
-            </Badge>
-          </div>
+        <CardHeader className="pb-3">
+          <CardTitle>{profile.nickname}</CardTitle>
+          <CardDescription>{profile.email}</CardDescription>
         </CardHeader>
+        <CardContent className="pt-0">
+          <Link
+            href="/my-page/reviews"
+            className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:border-primary/60 hover:bg-primary/5"
+          >
+            <Star className="h-4 w-4 text-primary" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">My Reviews</p>
+              <p className="text-xs text-muted-foreground">
+                {profile.reviewStats.verifiedReviewCount} verified
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+        </CardContent>
       </Card>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -181,6 +185,8 @@ export function ProfileView() {
             </div>
           </CardContent>
         </Card>
+
+        <h2 className="text-lg font-semibold tracking-tight">Dietary profile</h2>
 
         <Card>
           <CardHeader>
