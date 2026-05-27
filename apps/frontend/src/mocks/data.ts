@@ -5,6 +5,8 @@ import type {
   Cafeteria,
   Meal,
   MenuServing,
+  Receipt,
+  Review,
   User,
 } from "@/types";
 import { todayInSeoul } from "@/lib/date";
@@ -147,6 +149,78 @@ export const mockMenuServings: MenuServing[] = [
     verifiedReviewCount: 17,
     cafeteria: { id: "c_kaimaru", name: "Kaimaru" },
     meal: pickMealCard("m_pasta_carbonara"),
+  },
+];
+
+export const mockReviews: Review[] = [
+  {
+    id: "rev_001",
+    userId: "u_other_1",
+    mealId: "m_mackerel_set",
+    menuServingId: "ms_kaimaru_mackerel_lunch",
+    cafeteriaId: "c_kaimaru",
+    receiptId: "rcp_001",
+    isVerified: true,
+    rating: 5,
+    detailRatings: { taste: 5, price: 4, portion: 5 },
+    content: "Really fresh mackerel today. Kimchi was perfectly fermented. Highly recommend!",
+    createdAt: "2025-05-26T12:30:00.000Z",
+  },
+  {
+    id: "rev_002",
+    userId: "u_other_2",
+    mealId: "m_mackerel_set",
+    menuServingId: "ms_kaimaru_mackerel_lunch",
+    cafeteriaId: "c_kaimaru",
+    receiptId: "rcp_002",
+    isVerified: true,
+    rating: 4,
+    detailRatings: { taste: 4, price: 4, portion: 3 },
+    content: "Good but portion was a bit small today.",
+    managerReply: {
+      managerId: "mgr_kaimaru",
+      content: "Thank you for the feedback! We'll work on improving portion size.",
+      repliedAt: "2025-05-26T15:00:00.000Z",
+    },
+    createdAt: "2025-05-25T13:00:00.000Z",
+  },
+  {
+    id: "rev_003",
+    userId: "u_demo_student",
+    mealId: "m_chicken_curry",
+    menuServingId: "ms_kaimaru_curry_lunch",
+    cafeteriaId: "c_kaimaru",
+    receiptId: "rcp_003",
+    isVerified: true,
+    rating: 4,
+    detailRatings: { taste: 4, price: 5, portion: 4 },
+    content: "Great value for the price. Curry was mild but tasty.",
+    createdAt: "2025-05-24T12:45:00.000Z",
+  },
+];
+
+export const mockReceipts: Receipt[] = [
+  {
+    id: "rcp_003",
+    status: "USED",
+    parsed: {
+      purchasedAt: "2025-05-24T12:30:00.000Z",
+      cafeteriaName: "Kaimaru",
+      mealNames: ["Chicken Curry"],
+      totalPrice: 5200,
+    },
+    matchedMenuServings: [
+      {
+        id: "ms_kaimaru_curry_lunch",
+        mealName: "Chicken Curry",
+        cafeteriaName: "Kaimaru",
+        date: "2025-05-24",
+        price: 5200,
+      },
+    ],
+    confirmedMenuServingId: "ms_kaimaru_curry_lunch",
+    usedForReview: true,
+    reviewId: "rev_003",
   },
 ];
 
