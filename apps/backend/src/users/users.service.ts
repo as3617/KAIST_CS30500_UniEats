@@ -37,7 +37,11 @@ export class UsersService {
   async updateMe(userId: string, body?: UpdateMeBody) {
     const update = this.buildProfileUpdate(body);
     const user = await this.userModel
-      .findByIdAndUpdate(userId, { $set: update }, { new: true, runValidators: true })
+      .findByIdAndUpdate(
+        userId,
+        { $set: update },
+        { returnDocument: "after", runValidators: true },
+      )
       .lean()
       .exec();
 

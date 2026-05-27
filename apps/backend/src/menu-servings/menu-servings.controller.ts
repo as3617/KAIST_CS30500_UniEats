@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Controller, Get, Headers, Param, Query } from "@nestjs/common";
 import { ok } from "../common/api-response";
 import { MenuServingListQuery, MenuServingsService } from "./menu-servings.service";
 
@@ -7,12 +7,18 @@ export class MenuServingsController {
   constructor(private readonly menuServingsService: MenuServingsService) {}
 
   @Get()
-  async findAll(@Query() query: MenuServingListQuery) {
-    return ok(await this.menuServingsService.findAll(query));
+  async findAll(
+    @Query() query: MenuServingListQuery,
+    @Headers("authorization") authorization?: string,
+  ) {
+    return ok(await this.menuServingsService.findAll(query, authorization));
   }
 
   @Get(":menuServingId")
-  async findById(@Param("menuServingId") menuServingId: string) {
-    return ok(await this.menuServingsService.findById(menuServingId));
+  async findById(
+    @Param("menuServingId") menuServingId: string,
+    @Headers("authorization") authorization?: string,
+  ) {
+    return ok(await this.menuServingsService.findById(menuServingId, authorization));
   }
 }
