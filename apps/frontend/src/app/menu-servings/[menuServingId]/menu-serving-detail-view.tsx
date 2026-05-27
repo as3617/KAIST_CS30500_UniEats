@@ -197,6 +197,31 @@ export function MenuServingDetailView({
 
       <Card>
         <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-base">Reviews</CardTitle>
+              <CardDescription>
+                {serving.averageRating.toFixed(1)} / 5 &middot; {serving.verifiedReviewCount} verified
+              </CardDescription>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/menu-servings/${menuServingId}/reviews`}>
+                View all
+              </Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link href={`/menu-servings/${menuServingId}/reviews/new`}>
+              Write a Review
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">Cafeteria</CardTitle>
           <CardDescription>{serving.cafeteria.name}</CardDescription>
         </CardHeader>
