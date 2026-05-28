@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Filter, Search, X } from "lucide-react";
+import { BarChart3, Filter, Search, Trophy, X } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,11 +14,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MenuServingCard } from "@/components/menu-serving-card";
 import { ApiClientError, api } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
-import { todayInSeoul, formatPriceKRW } from "@/lib/date";
+import { todayInSeoul } from "@/lib/date";
 import {
-  ALLERGY_LABELS,
   CATEGORY_CODES,
   CATEGORY_LABELS,
   DIETARY_LABEL_CODES,
@@ -35,6 +34,8 @@ import type {
   MenuServing,
   PaginatedData,
   User,
+  CafeteriaRankItem,
+  WeeklyBestItem,
 } from "@/types";
 
 export function DashboardView() {
@@ -47,6 +48,9 @@ export function DashboardView() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
+  const [weeklyBest, setWeeklyBest] = useState<WeeklyBestItem[]>([]);
+  const [cafeteriaRanking, setCafeteriaRanking] = useState<CafeteriaRankItem[]>([]);
+  const [isInsightsLoading, setIsInsightsLoading] = useState(true);
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -118,6 +122,37 @@ export function DashboardView() {
     fetchMenu();
   }, [fetchMenu]);
 
+  useEffect(() => {
+    let isCurrent = true;
+
+    setIsInsightsLoading(true);
+    Promise.all([
+      api.get<WeeklyBestItem[]>("/recommendations/weekly-best", {
+        query: { limit: 3 },
+      }),
+      api.get<CafeteriaRankItem[]>("/analytics/cafeteria-ranking", {
+        query: { limit: 3 },
+      }),
+    ])
+      .then(([bestItems, rankings]) => {
+        if (!isCurrent) return;
+        setWeeklyBest(bestItems);
+        setCafeteriaRanking(rankings);
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setWeeklyBest([]);
+        setCafeteriaRanking([]);
+      })
+      .finally(() => {
+        if (isCurrent) setIsInsightsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
   function handleSignOut() {
     authStorage.clear();
     setUser(null);
@@ -166,6 +201,90 @@ export function DashboardView() {
         </div>
       </header>
 
+      <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div className="space-y-1">
+              <CardTitle className="text-base">Weekly Best</CardTitle>
+              <CardDescription>
+                Top meals weighted by rating and verified review volume.
+              </CardDescription>
+            </div>
+            <Trophy className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {isInsightsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading recommendations...</p>
+            ) : weeklyBest.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No recommendations yet.</p>
+            ) : (
+              <ol className="space-y-3">
+                {weeklyBest.map((item, index) => (
+                  <li key={item.menuServingId} className="flex items-center gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/menu-servings/${item.menuServingId}`}
+                        className="font-medium hover:underline"
+                      >
+                        {item.mealName}
+                      </Link>
+                      <p className="text-xs text-muted-foreground">
+                        {item.cafeteriaName} &middot; {item.averageRating.toFixed(1)} / 5 from{" "}
+                        {item.verifiedReviewCount} verified
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div className="space-y-1">
+              <CardTitle className="text-base">Cafeteria ranking</CardTitle>
+              <CardDescription>Verified satisfaction by dining hall.</CardDescription>
+            </div>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {isInsightsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading rankings...</p>
+            ) : cafeteriaRanking.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No ranking data yet.</p>
+            ) : (
+              <ol className="space-y-3">
+                {cafeteriaRanking.map((item) => (
+                  <li key={item.cafeteriaId} className="space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-medium">
+                        #{item.rank} {item.cafeteriaName}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {item.averageRating.toFixed(1)} / 5
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${Math.min(item.averageRating / 5, 1) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {item.verifiedReviewCount} verified reviews
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
           <div className="space-y-1">
@@ -174,7 +293,12 @@ export function DashboardView() {
               Search today&apos;s menus by category, cafeteria, or dietary option.
             </CardDescription>
           </div>
-          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/search">
+              <Filter className="h-4 w-4" />
+              Advanced
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent className="space-y-5">
           <form onSubmit={handleSearch} className="flex gap-2">
@@ -322,57 +446,5 @@ export function DashboardView() {
         </section>
       )}
     </main>
-  );
-}
-
-function MenuServingCard({ serving }: { serving: MenuServing }) {
-  const isSoldOut = serving.status === "SOLD_OUT";
-  const hasAllergyConflict = serving.allergyWarning?.hasConflict ?? false;
-
-  return (
-    <Link href={`/menu-servings/${serving.id}`} className="block h-full">
-      <Card className="h-full transition-colors hover:border-primary/40">
-        <CardHeader className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-lg">{serving.meal.name}</CardTitle>
-            <Badge variant={isSoldOut ? "destructive" : "secondary"}>
-              {isSoldOut ? "Sold out" : MEAL_TIME_LABELS[serving.mealTime]}
-            </Badge>
-          </div>
-          <CardDescription>
-            {serving.cafeteria.name} &middot; {CATEGORY_LABELS[serving.meal.category]}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="font-medium">{formatPriceKRW(serving.price)}</span>
-            <span className="text-muted-foreground">
-              {serving.averageRating.toFixed(1)} / 5 ({serving.verifiedReviewCount})
-            </span>
-          </div>
-          {hasAllergyConflict ? (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-destructive">
-              <AlertTriangle className="mt-0.5 h-4 w-4" />
-              <div>
-                <p className="font-medium">Allergy warning</p>
-                <p className="text-xs">
-                  Contains:{" "}
-                  {serving.allergyWarning!.matchedAllergens
-                    .map((a) => ALLERGY_LABELS[a])
-                    .join(", ")}
-                </p>
-              </div>
-            </div>
-          ) : null}
-          <div className="flex flex-wrap gap-1">
-            {serving.meal.dietaryLabels.map((label) => (
-              <Badge key={label} variant="outline" className="text-xs">
-                {DIETARY_LABELS[label]}
-              </Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
   );
 }

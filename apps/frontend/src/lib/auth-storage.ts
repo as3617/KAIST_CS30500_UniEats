@@ -8,9 +8,16 @@ import type { AuthTokens, User } from "@/types";
 const ACCESS_TOKEN_KEY = "unieats.accessToken";
 const REFRESH_TOKEN_KEY = "unieats.refreshToken";
 const USER_KEY = "unieats.user";
+const AUTH_CHANGE_EVENT = "unieats.auth-change";
+const AUTH_STORAGE_KEYS = [ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY];
 
 function isBrowser() {
   return typeof window !== "undefined";
+}
+
+function notifyAuthChange() {
+  if (!isBrowser()) return;
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 
 export const authStorage = {
@@ -44,6 +51,7 @@ export const authStorage = {
   setUser(user: Pick<User, "id" | "email" | "nickname" | "role" | "isEmailVerified">) {
     if (!isBrowser()) return;
     window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+    notifyAuthChange();
   },
 
   clear() {
@@ -51,5 +59,25 @@ export const authStorage = {
     window.localStorage.removeItem(ACCESS_TOKEN_KEY);
     window.localStorage.removeItem(REFRESH_TOKEN_KEY);
     window.localStorage.removeItem(USER_KEY);
+    notifyAuthChange();
+  },
+
+  subscribe(listener: () => void) {
+    if (!isBrowser()) return () => {};
+
+    const handleAuthChange = () => listener();
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === null || AUTH_STORAGE_KEYS.includes(event.key)) {
+        listener();
+      }
+    };
+
+    window.addEventListener(AUTH_CHANGE_EVENT, handleAuthChange);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(AUTH_CHANGE_EVENT, handleAuthChange);
+      window.removeEventListener("storage", handleStorage);
+    };
   },
 };
