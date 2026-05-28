@@ -82,7 +82,13 @@ export function ManagerView() {
   }, []);
 
   const fetchManagerData = useCallback(async () => {
-    if (!selectedCafeteriaId) return;
+    if (!selectedCafeteriaId) {
+      setServings([]);
+      setReviews([]);
+      setReplyDrafts({});
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
