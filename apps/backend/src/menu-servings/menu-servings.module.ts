@@ -1,6 +1,10 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { AuthModule } from "../auth/auth.module";
+import {
+  CafeteriaManager,
+  CafeteriaManagerSchema,
+} from "../cafeteria-managers/schemas/cafeteria-manager.schema";
 import { Cafeteria, CafeteriaSchema } from "../cafeterias/schemas/cafeteria.schema";
 import { Meal, MealSchema } from "../meals/schemas/meal.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
@@ -16,6 +20,7 @@ import { MenuServing, MenuServingSchema } from "./schemas/menu-serving.schema";
       { name: Meal.name, schema: MealSchema },
       { name: Cafeteria.name, schema: CafeteriaSchema },
       { name: User.name, schema: UserSchema },
+      { name: CafeteriaManager.name, schema: CafeteriaManagerSchema },
     ]),
   ],
   controllers: [MenuServingsController],
