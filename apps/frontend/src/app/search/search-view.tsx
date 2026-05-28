@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Filter, Search, X } from "lucide-react";
+import { CalendarDays, Search, SlidersHorizontal, X } from "lucide-react";
 
+import { MenuServingCard } from "@/components/menu-serving-card";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MenuServingCard } from "@/components/menu-serving-card";
 import { ApiClientError, api } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
 import { todayInSeoul } from "@/lib/date";
@@ -36,26 +35,28 @@ import type {
   User,
 } from "@/types";
 
-export function DashboardView() {
+export function SearchView() {
   const today = useMemo(() => todayInSeoul(), []);
   const [items, setItems] = useState<MenuServing[]>([]);
-  const [user, setUser] = useState<Pick<
-    User,
-    "id" | "email" | "nickname" | "role" | "isEmailVerified"
-  > | null>(null);
+  const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
+  const [user, setUser] = useState<Pick<User, "id" | "email" | "nickname"> | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [date, setDate] = useState(today);
   const [category, setCategory] = useState<CategoryCode | "">("");
   const [dietaryLabel, setDietaryLabel] = useState<DietaryLabelCode | "">("");
   const [cafeteriaId, setCafeteriaId] = useState("");
   const [mealTime, setMealTime] = useState<MealTime | "">("");
   const [hideAllergyConflicts, setHideAllergyConflicts] = useState(false);
+
   const hasActiveFilters = Boolean(
     searchQuery ||
+      date !== today ||
       category ||
       dietaryLabel ||
       cafeteriaId ||
@@ -84,44 +85,35 @@ export function DashboardView() {
     };
   }, []);
 
-  const fetchMenu = useCallback(async () => {
+  const fetchResults = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+
     try {
       const data = await api.get<PaginatedData<MenuServing>>("/menu-servings", {
         query: {
-          date: today,
+          date,
           q: searchQuery || undefined,
           category: category || undefined,
           dietaryLabel: dietaryLabel || undefined,
           cafeteriaId: cafeteriaId || undefined,
           mealTime: mealTime || undefined,
           hideAllergyConflicts: hideAllergyConflicts ? "true" : undefined,
-          limit: 20,
+          limit: 40,
         },
       });
       setItems(data.items);
       setTotal(data.total);
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        setError(err.message);
-      } else {
-        setError("Failed to load menu");
-      }
+      setError(err instanceof ApiClientError ? err.message : "Failed to search menus");
     } finally {
       setIsLoading(false);
     }
-  }, [today, searchQuery, category, dietaryLabel, cafeteriaId, mealTime, hideAllergyConflicts]);
+  }, [date, searchQuery, category, dietaryLabel, cafeteriaId, mealTime, hideAllergyConflicts]);
 
   useEffect(() => {
-    fetchMenu();
-  }, [fetchMenu]);
-
-  function handleSignOut() {
-    authStorage.clear();
-    setUser(null);
-    setHideAllergyConflicts(false);
-  }
+    fetchResults();
+  }, [fetchResults]);
 
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -131,6 +123,7 @@ export function DashboardView() {
   function resetFilters() {
     setSearchInput("");
     setSearchQuery("");
+    setDate(today);
     setCategory("");
     setDietaryLabel("");
     setCafeteriaId("");
@@ -139,57 +132,44 @@ export function DashboardView() {
   }
 
   return (
-    <main className="container max-w-4xl space-y-8 py-8">
+    <main className="container max-w-5xl space-y-6 py-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            Today &middot; {today}
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">Search</p>
+          <h1 className="text-3xl font-semibold tracking-tight">Find campus meals</h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Search by meal, ingredient, or cafeteria, then narrow results with cuisine,
+            dining hall, meal time, and dietary filters.
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Cafeteria menu</h1>
         </div>
-        <div className="flex items-center gap-2">
-          {user ? (
-            <>
-              <span className="text-sm text-muted-foreground">
-                Signed in as <span className="font-medium text-foreground">{user.nickname}</span>
-              </span>
-              <Button variant="outline" size="sm" onClick={handleSignOut}>
-                Sign out
-              </Button>
-            </>
-          ) : (
-            <Button asChild size="sm">
-              <Link href="/login">Sign in</Link>
-            </Button>
-          )}
-        </div>
+        {hasActiveFilters ? (
+          <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
+            <X className="h-4 w-4" />
+            Clear
+          </Button>
+        ) : null}
       </header>
 
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div className="space-y-1">
-            <CardTitle className="text-base">Find a meal</CardTitle>
+            <CardTitle className="text-base">Search filters</CardTitle>
             <CardDescription>
-              Search today&apos;s menus by category, cafeteria, or dietary option.
+              Combine text search with structured meal and cafeteria filters.
             </CardDescription>
           </div>
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/search">
-              <Filter className="h-4 w-4" />
-              Advanced
-            </Link>
-          </Button>
+          <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent className="space-y-5">
           <form onSubmit={handleSearch} className="flex gap-2">
-            <Label htmlFor="menu-search" className="sr-only">
+            <Label htmlFor="search-query" className="sr-only">
               Search meals
             </Label>
             <Input
-              id="menu-search"
+              id="search-query"
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="Search meals or ingredients"
+              placeholder="Search meals, ingredients, or cafeterias"
             />
             <Button type="submit" aria-label="Search meals">
               <Search className="h-4 w-4" />
@@ -197,33 +177,24 @@ export function DashboardView() {
             </Button>
           </form>
 
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            <Button
-              type="button"
-              size="sm"
-              variant={category === "" ? "default" : "outline"}
-              onClick={() => setCategory("")}
-            >
-              All
-            </Button>
-            {CATEGORY_CODES.map((value) => (
-              <Button
-                key={value}
-                type="button"
-                size="sm"
-                variant={category === value ? "default" : "outline"}
-                onClick={() => setCategory(value)}
-              >
-                {CATEGORY_LABELS[value]}
-              </Button>
-            ))}
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
-              <Label htmlFor="cafeteria-filter">Cafeteria</Label>
+              <Label htmlFor="search-date">Date</Label>
+              <div className="relative">
+                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="search-date"
+                  type="date"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="search-cafeteria">Cafeteria</Label>
               <select
-                id="cafeteria-filter"
+                id="search-cafeteria"
                 value={cafeteriaId}
                 onChange={(event) => setCafeteriaId(event.target.value)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -237,9 +208,9 @@ export function DashboardView() {
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="meal-time-filter">Meal time</Label>
+              <Label htmlFor="search-meal-time">Meal time</Label>
               <select
-                id="meal-time-filter"
+                id="search-meal-time"
                 value={mealTime}
                 onChange={(event) => setMealTime(event.target.value as MealTime | "")}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -253,9 +224,9 @@ export function DashboardView() {
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="dietary-filter">Dietary option</Label>
+              <Label htmlFor="search-dietary">Dietary option</Label>
               <select
-                id="dietary-filter"
+                id="search-dietary"
                 value={dietaryLabel}
                 onChange={(event) =>
                   setDietaryLabel(event.target.value as DietaryLabelCode | "")
@@ -272,27 +243,44 @@ export function DashboardView() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <label className="flex items-center gap-2 text-sm">
+          <div className="space-y-3">
+            <Label>Cuisine</Label>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              <Button
+                type="button"
+                size="sm"
+                variant={category === "" ? "default" : "outline"}
+                onClick={() => setCategory("")}
+              >
+                All
+              </Button>
+              {CATEGORY_CODES.map((value) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={category === value ? "default" : "outline"}
+                  onClick={() => setCategory(value)}
+                >
+                  {CATEGORY_LABELS[value]}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
               checked={hideAllergyConflicts}
               onChange={(event) => setHideAllergyConflicts(event.target.checked)}
               disabled={!user}
-              className="h-4 w-4 rounded border-input"
+              className="mt-0.5 h-4 w-4 rounded border-input"
             />
             <span className={user ? "" : "text-muted-foreground"}>
               Hide meals that conflict with my allergy profile
               {!user ? " (sign in required)" : ""}
             </span>
-            </label>
-            {hasActiveFilters ? (
-              <Button type="button" variant="ghost" size="sm" onClick={resetFilters}>
-                <X className="h-4 w-4" />
-                Clear filters
-              </Button>
-            ) : null}
-          </div>
+          </label>
         </CardContent>
       </Card>
 
@@ -306,17 +294,20 @@ export function DashboardView() {
       ) : null}
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading menu...</p>
+        <p className="text-sm text-muted-foreground">Searching menus...</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No menu items found for today.
-        </p>
+        <div className="rounded-lg border border-dashed px-6 py-10 text-center">
+          <p className="text-sm font-medium">No matching meals found</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Try another date, cafeteria, cuisine, or dietary option.
+          </p>
+        </div>
       ) : (
         <section className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Showing {items.length} of {total} available menu items
+            Showing {items.length} of {total} matching menu items
           </p>
-          <ul className="grid gap-4 sm:grid-cols-2">
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => (
               <li key={item.id}>
                 <MenuServingCard serving={item} />

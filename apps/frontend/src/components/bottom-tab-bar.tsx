@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, MapPinned, User } from "lucide-react";
+import { Home, MapPinned, Search, User } from "lucide-react";
 
 const tabs = [
   { href: "/campus-map", icon: MapPinned },
   { href: "/dashboard", icon: Home },
+  { href: "/search", icon: Search },
   { href: "/my-page", icon: User },
 ] as const;
 
 function getActiveTab(pathname: string): string {
   if (pathname.startsWith("/campus-map")) return "/campus-map";
+  if (pathname.startsWith("/search")) return "/search";
   if (pathname.startsWith("/my-page")) return "/my-page";
   return "/dashboard";
 }

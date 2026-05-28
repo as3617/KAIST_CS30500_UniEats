@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 
 import { proxyToBackend, shouldUseMockApi } from "../_utils";
-import { mockMenuServings, mockUser } from "@/mocks/data";
+import { mockUser } from "@/mocks/data";
+import { menuServingsStore } from "@/mocks/store";
 import { okJson } from "@/mocks/respond";
 import type { AllergyCode, DietaryLabelCode, MenuServing } from "@/types";
 
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     ? mockUser.dietaryProfile.allergies
     : [];
 
-  let filtered = mockMenuServings.slice();
+  let filtered = menuServingsStore.slice();
 
   if (query.date) {
     filtered = filtered.filter((m) => m.date === query.date);
@@ -67,7 +68,14 @@ export async function GET(request: NextRequest) {
   }
   if (query.q) {
     const q = query.q;
-    filtered = filtered.filter((m) => m.meal.name.toLowerCase().includes(q));
+    filtered = filtered.filter((m) => {
+      const searchable = [
+        m.meal.name,
+        m.cafeteria.name,
+        ...m.meal.ingredients,
+      ].join(" ");
+      return searchable.toLowerCase().includes(q);
+    });
   }
 
   const decorated: MenuServing[] = filtered.map((serving) => {

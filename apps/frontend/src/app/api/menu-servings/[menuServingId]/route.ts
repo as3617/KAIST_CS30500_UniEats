@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 
 import { proxyToBackend, shouldUseMockApi } from "../../_utils";
-import { mockCafeterias, mockMeals, mockMenuServings, mockUser } from "@/mocks/data";
+import { mockCafeterias, mockMeals, mockUser } from "@/mocks/data";
+import { menuServingsStore } from "@/mocks/store";
 import { errorJson, okJson } from "@/mocks/respond";
 import type { AllergyCode, MenuServingDetail } from "@/types";
 
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return proxyToBackend(request);
   }
 
-  const serving = mockMenuServings.find((item) => item.id === params.menuServingId);
+  const serving = menuServingsStore.find((item) => item.id === params.menuServingId);
   if (!serving) {
     return errorJson(404, "NOT_FOUND", "menu serving not found");
   }

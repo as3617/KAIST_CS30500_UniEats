@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, MapPinned, User } from "lucide-react";
+import { BriefcaseBusiness, Home, MapPinned, Search, User } from "lucide-react";
 
 const navLinks = [
   { href: "/dashboard", icon: Home, label: "Home" },
+  { href: "/search", icon: Search, label: "Search" },
   { href: "/campus-map", icon: MapPinned, label: "Map" },
+  { href: "/manager", icon: BriefcaseBusiness, label: "Manager" },
   { href: "/my-page", icon: User, label: "My Page" },
 ];
 
