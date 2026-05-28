@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Filter, Search, X } from "lucide-react";
+import { BarChart3, Filter, Search, Trophy, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +34,8 @@ import type {
   MenuServing,
   PaginatedData,
   User,
+  CafeteriaRankItem,
+  WeeklyBestItem,
 } from "@/types";
 
 export function DashboardView() {
@@ -46,6 +48,9 @@ export function DashboardView() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
+  const [weeklyBest, setWeeklyBest] = useState<WeeklyBestItem[]>([]);
+  const [cafeteriaRanking, setCafeteriaRanking] = useState<CafeteriaRankItem[]>([]);
+  const [isInsightsLoading, setIsInsightsLoading] = useState(true);
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -117,6 +122,37 @@ export function DashboardView() {
     fetchMenu();
   }, [fetchMenu]);
 
+  useEffect(() => {
+    let isCurrent = true;
+
+    setIsInsightsLoading(true);
+    Promise.all([
+      api.get<WeeklyBestItem[]>("/recommendations/weekly-best", {
+        query: { limit: 3 },
+      }),
+      api.get<CafeteriaRankItem[]>("/analytics/cafeteria-ranking", {
+        query: { limit: 3 },
+      }),
+    ])
+      .then(([bestItems, rankings]) => {
+        if (!isCurrent) return;
+        setWeeklyBest(bestItems);
+        setCafeteriaRanking(rankings);
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setWeeklyBest([]);
+        setCafeteriaRanking([]);
+      })
+      .finally(() => {
+        if (isCurrent) setIsInsightsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
   function handleSignOut() {
     authStorage.clear();
     setUser(null);
@@ -164,6 +200,90 @@ export function DashboardView() {
           )}
         </div>
       </header>
+
+      <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div className="space-y-1">
+              <CardTitle className="text-base">Weekly Best</CardTitle>
+              <CardDescription>
+                Top meals weighted by rating and verified review volume.
+              </CardDescription>
+            </div>
+            <Trophy className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {isInsightsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading recommendations...</p>
+            ) : weeklyBest.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No recommendations yet.</p>
+            ) : (
+              <ol className="space-y-3">
+                {weeklyBest.map((item, index) => (
+                  <li key={item.menuServingId} className="flex items-center gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/menu-servings/${item.menuServingId}`}
+                        className="font-medium hover:underline"
+                      >
+                        {item.mealName}
+                      </Link>
+                      <p className="text-xs text-muted-foreground">
+                        {item.cafeteriaName} &middot; {item.averageRating.toFixed(1)} / 5 from{" "}
+                        {item.verifiedReviewCount} verified
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div className="space-y-1">
+              <CardTitle className="text-base">Cafeteria ranking</CardTitle>
+              <CardDescription>Verified satisfaction by dining hall.</CardDescription>
+            </div>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {isInsightsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading rankings...</p>
+            ) : cafeteriaRanking.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No ranking data yet.</p>
+            ) : (
+              <ol className="space-y-3">
+                {cafeteriaRanking.map((item) => (
+                  <li key={item.cafeteriaId} className="space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-medium">
+                        #{item.rank} {item.cafeteriaName}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {item.averageRating.toFixed(1)} / 5
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${Math.min(item.averageRating / 5, 1) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {item.verifiedReviewCount} verified reviews
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+      </section>
 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
