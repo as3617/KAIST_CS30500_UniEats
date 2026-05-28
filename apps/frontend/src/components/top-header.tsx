@@ -2,18 +2,40 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BriefcaseBusiness, Home, MapPinned, Search, User } from "lucide-react";
+import { useEffect, useState } from "react";
+import { BriefcaseBusiness, Home, LogIn, MapPinned, Search, User } from "lucide-react";
 
-const navLinks = [
+import { authStorage } from "@/lib/auth-storage";
+import type { User as AuthUser } from "@/types";
+
+const publicNavLinks = [
   { href: "/dashboard", icon: Home, label: "Home" },
   { href: "/search", icon: Search, label: "Search" },
   { href: "/campus-map", icon: MapPinned, label: "Map" },
-  { href: "/manager", icon: BriefcaseBusiness, label: "Manager" },
-  { href: "/my-page", icon: User, label: "My Page" },
 ];
+const managerNavLink = { href: "/manager", icon: BriefcaseBusiness, label: "Manager" };
+const myPageNavLink = { href: "/my-page", icon: User, label: "My Page" };
+const signInNavLink = { href: "/login", icon: LogIn, label: "Sign in" };
+
+function canUseManager(user: Pick<AuthUser, "role"> | null) {
+  return user?.role === "MANAGER" || user?.role === "ADMIN";
+}
 
 export function TopHeader() {
   const pathname = usePathname();
+  const [user, setUser] = useState<Pick<AuthUser, "role"> | null>(null);
+
+  useEffect(() => {
+    const syncUser = () => setUser(authStorage.getUser());
+    syncUser();
+    return authStorage.subscribe(syncUser);
+  }, []);
+
+  const navLinks = [
+    ...publicNavLinks,
+    ...(canUseManager(user) ? [managerNavLink] : []),
+    user ? myPageNavLink : signInNavLink,
+  ];
 
   return (
     <header className="sticky top-0 z-50 bg-background border-b border-border">
