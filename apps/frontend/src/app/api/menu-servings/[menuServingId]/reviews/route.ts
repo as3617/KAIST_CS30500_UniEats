@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 
 import { proxyToBackend, shouldUseMockApi } from "../../../_utils";
-import { mockMenuServings, mockUser } from "@/mocks/data";
-import { receiptsStore, reviewsStore } from "@/mocks/store";
+import { mockUser } from "@/mocks/data";
+import { menuServingsStore, receiptsStore, reviewsStore } from "@/mocks/store";
 import { createdJson, errorJson, okJson } from "@/mocks/respond";
 import type { PaginatedData, Review } from "@/types";
 
@@ -11,7 +11,7 @@ type RouteParams = { params: { menuServingId: string } };
 export async function GET(request: NextRequest, { params }: RouteParams) {
   if (!shouldUseMockApi()) return proxyToBackend(request);
 
-  const serving = mockMenuServings.find((s) => s.id === params.menuServingId);
+  const serving = menuServingsStore.find((s) => s.id === params.menuServingId);
   if (!serving) return errorJson(404, "NOT_FOUND", "menu serving not found");
 
   const reviews = reviewsStore.filter((r) => r.menuServingId === params.menuServingId);
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     .startsWith("bearer ");
   if (!isAuthenticated) return errorJson(401, "UNAUTHORIZED", "sign in required");
 
-  const serving = mockMenuServings.find((s) => s.id === params.menuServingId);
+  const serving = menuServingsStore.find((s) => s.id === params.menuServingId);
   if (!serving) return errorJson(404, "NOT_FOUND", "menu serving not found");
 
   const existing = reviewsStore.find(
