@@ -131,7 +131,7 @@ export type DetailRatings = {
 };
 
 export type ManagerReply = {
-  managerId: string;
+  managerId?: string;
   content: string;
   repliedAt: string;
   updatedAt?: string;
@@ -139,11 +139,12 @@ export type ManagerReply = {
 
 export type Review = {
   id: string;
-  userId: string;
+  userId?: string;
+  reviewerDisplayName?: string;
   mealId: string;
   menuServingId: string;
   cafeteriaId: string;
-  receiptId: string;
+  receiptId?: string;
   isVerified: boolean;
   rating: number;
   detailRatings: DetailRatings;
