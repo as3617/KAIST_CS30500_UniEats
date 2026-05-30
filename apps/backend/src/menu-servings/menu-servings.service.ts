@@ -1,15 +1,33 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
+import { AuthenticatedUser, AuthService } from "../auth/auth.service";
+import { CafeteriaManager } from "../cafeteria-managers/schemas/cafeteria-manager.schema";
+import { Cafeteria } from "../cafeterias/schemas/cafeteria.schema";
 import { PaginatedData } from "../common/api-response";
+import {
+  AllergyCode,
+  MEAL_TIMES,
+  MENU_SERVING_STATUSES,
+  ManagerPermission,
+  ManagerRole,
+  MealTime,
+  MenuServingStatus,
+  UserRole,
+} from "../common/enums";
 import { toObjectId } from "../common/object-id";
 import { parsePagination } from "../common/pagination";
-import { AuthService } from "../auth/auth.service";
-import { Cafeteria } from "../cafeterias/schemas/cafeteria.schema";
 import { Meal } from "../meals/schemas/meal.schema";
-import { AllergyCode, MenuServingStatus } from "../common/enums";
 import { User } from "../users/schemas/user.schema";
 import { MenuServing } from "./schemas/menu-serving.schema";
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface MenuServingListQuery {
   date?: string;
@@ -23,6 +41,20 @@ export interface MenuServingListQuery {
   limit?: string;
 }
 
+export interface MenuServingCreateBody {
+  mealId?: unknown;
+  cafeteriaId?: unknown;
+  date?: unknown;
+  mealTime?: unknown;
+  price?: unknown;
+  status?: unknown;
+  stock?: unknown;
+}
+
+export interface MenuServingStatusBody {
+  status?: unknown;
+}
+
 @Injectable()
 export class MenuServingsService {
   constructor(
@@ -34,6 +66,8 @@ export class MenuServingsService {
     private readonly cafeteriaModel: Model<Cafeteria>,
     @InjectModel(User.name)
     private readonly userModel: Model<User>,
+    @InjectModel(CafeteriaManager.name)
+    private readonly cafeteriaManagerModel: Model<CafeteriaManager>,
     private readonly authService: AuthService,
   ) {}
 
@@ -101,6 +135,78 @@ export class MenuServingsService {
     return this.toResponse(serving, viewerAllergies);
   }
 
+  async create(authorization: string | undefined, body?: MenuServingCreateBody) {
+    const currentUser = await this.authService.requireUser(authorization, {
+      requireEmailVerified: true,
+    });
+    const normalized = this.normalizeCreateBody(body);
+
+    await this.assertCanManageCafeteria(
+      currentUser,
+      normalized.cafeteriaId,
+      ManagerPermission.MENU_WRITE,
+    );
+    await Promise.all([
+      this.requireActiveCafeteria(normalized.cafeteriaId),
+      this.requireMeal(normalized.mealId),
+    ]);
+
+    try {
+      const serving = await this.menuServingModel.create({
+        ...normalized,
+        createdBy: new Types.ObjectId(currentUser.id),
+      });
+      return this.toResponse(await this.findServingForManagerResponse(serving._id as Types.ObjectId), null);
+    } catch (error) {
+      if (this.isDuplicateKeyError(error)) {
+        throw new ConflictException("menu serving already exists");
+      }
+      throw error;
+    }
+  }
+
+  async updateStatus(
+    menuServingId: string,
+    authorization: string | undefined,
+    body?: MenuServingStatusBody,
+  ) {
+    const currentUser = await this.authService.requireUser(authorization, {
+      requireEmailVerified: true,
+    });
+    const _id = toObjectId(menuServingId, "menuServingId");
+    const status = this.normalizeStatusBody(body);
+    const existingServing = await this.menuServingModel.findById(_id).lean().exec();
+
+    if (!existingServing) {
+      throw new NotFoundException("menu serving not found");
+    }
+
+    await this.assertCanManageCafeteria(
+      currentUser,
+      existingServing.cafeteriaId as Types.ObjectId,
+      ManagerPermission.STATUS_WRITE,
+    );
+
+    const serving = await this.menuServingModel
+      .findByIdAndUpdate(_id, { $set: { status } }, { returnDocument: "after", runValidators: true })
+      .populate({
+        path: "mealId",
+        select: "name description category imageUrl ingredients allergens dietaryLabels nutrition",
+      })
+      .populate({
+        path: "cafeteriaId",
+        select: "name description location openingHours",
+      })
+      .lean()
+      .exec();
+
+    if (!serving) {
+      throw new NotFoundException("menu serving not found");
+    }
+
+    return this.toResponse(serving, null);
+  }
+
   private async buildServingFilter(
     query: MenuServingListQuery,
     viewerAllergies: AllergyCode[] | null,
@@ -166,6 +272,164 @@ export class MenuServingsService {
     }
 
     return filter;
+  }
+
+  private async assertCanManageCafeteria(
+    currentUser: AuthenticatedUser,
+    cafeteriaId: Types.ObjectId,
+    permission: ManagerPermission,
+  ) {
+    if (currentUser.role === UserRole.ADMIN) {
+      return;
+    }
+
+    if (currentUser.role !== UserRole.MANAGER) {
+      throw new ForbiddenException("manager role required");
+    }
+
+    const manager = await this.cafeteriaManagerModel
+      .findOne({
+        userId: new Types.ObjectId(currentUser.id),
+        cafeteriaId,
+        isActive: true,
+        $or: [{ managerRole: ManagerRole.OWNER }, { permissions: permission }],
+      })
+      .select("_id")
+      .lean()
+      .exec();
+
+    if (!manager) {
+      throw new ForbiddenException(`${permission} permission required`);
+    }
+  }
+
+  private async requireActiveCafeteria(cafeteriaId: Types.ObjectId) {
+    const cafeteria = await this.cafeteriaModel
+      .findOne({ _id: cafeteriaId, isActive: true })
+      .select("_id")
+      .lean()
+      .exec();
+
+    if (!cafeteria) {
+      throw new NotFoundException("cafeteria not found");
+    }
+  }
+
+  private async requireMeal(mealId: Types.ObjectId) {
+    const meal = await this.mealModel.findById(mealId).select("_id").lean().exec();
+
+    if (!meal) {
+      throw new NotFoundException("meal not found");
+    }
+  }
+
+  private async findServingForManagerResponse(servingId: Types.ObjectId) {
+    const serving = await this.menuServingModel
+      .findById(servingId)
+      .populate({
+        path: "mealId",
+        select: "name description category imageUrl ingredients allergens dietaryLabels nutrition",
+      })
+      .populate({
+        path: "cafeteriaId",
+        select: "name description location openingHours",
+      })
+      .lean()
+      .exec();
+
+    if (!serving) {
+      throw new NotFoundException("menu serving not found");
+    }
+
+    return serving;
+  }
+
+  private normalizeCreateBody(body?: MenuServingCreateBody) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new BadRequestException("request body is required");
+    }
+
+    return {
+      mealId: toObjectId(this.requiredString(body.mealId, "mealId"), "mealId"),
+      cafeteriaId: toObjectId(this.requiredString(body.cafeteriaId, "cafeteriaId"), "cafeteriaId"),
+      date: this.normalizeDate(body.date),
+      mealTime: this.normalizeEnum(body.mealTime, "mealTime", MEAL_TIMES) as MealTime,
+      price: this.normalizeNonNegativeNumber(body.price, "price"),
+      status: this.normalizeOptionalEnum(
+        body.status,
+        "status",
+        MENU_SERVING_STATUSES,
+        MenuServingStatus.AVAILABLE,
+      ) as MenuServingStatus,
+      stock: this.normalizeOptionalNonNegativeInteger(body.stock, "stock"),
+    };
+  }
+
+  private normalizeStatusBody(body?: MenuServingStatusBody): MenuServingStatus {
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new BadRequestException("request body is required");
+    }
+
+    return this.normalizeEnum(body.status, "status", MENU_SERVING_STATUSES) as MenuServingStatus;
+  }
+
+  private requiredString(value: unknown, fieldName: string) {
+    if (typeof value !== "string" || !value.trim()) {
+      throw new BadRequestException(`${fieldName} is required`);
+    }
+    return value.trim();
+  }
+
+  private normalizeDate(value: unknown) {
+    if (typeof value !== "string" || !DATE_PATTERN.test(value)) {
+      throw new BadRequestException("date must use YYYY-MM-DD format");
+    }
+
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+      throw new BadRequestException("date must be a valid calendar date");
+    }
+
+    return value;
+  }
+
+  private normalizeEnum(value: unknown, fieldName: string, allowedValues: string[]) {
+    if (typeof value !== "string" || !allowedValues.includes(value)) {
+      throw new BadRequestException(`${fieldName} contains invalid value`);
+    }
+    return value;
+  }
+
+  private normalizeOptionalEnum(
+    value: unknown,
+    fieldName: string,
+    allowedValues: string[],
+    fallback: string,
+  ) {
+    if (value === undefined || value === null) {
+      return fallback;
+    }
+    return this.normalizeEnum(value, fieldName, allowedValues);
+  }
+
+  private normalizeNonNegativeNumber(value: unknown, fieldName: string) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      throw new BadRequestException(`${fieldName} must be a non-negative number`);
+    }
+    return value;
+  }
+
+  private normalizeOptionalNonNegativeInteger(
+    value: unknown,
+    fieldName: string,
+  ): number | undefined {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+      throw new BadRequestException(`${fieldName} must be a non-negative integer`);
+    }
+    return value;
   }
 
   private toResponse(serving: any, viewerAllergies: AllergyCode[] | null) {
@@ -261,5 +525,14 @@ export class MenuServingsService {
       dietaryLabels: meal.dietaryLabels ?? [],
       nutrition: meal.nutrition ?? {},
     };
+  }
+
+  private isDuplicateKeyError(error: unknown): boolean {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: unknown }).code === 11000
+    );
   }
 }
