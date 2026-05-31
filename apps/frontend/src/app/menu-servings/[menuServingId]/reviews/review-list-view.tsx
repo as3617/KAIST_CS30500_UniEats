@@ -126,6 +126,9 @@ function ReviewCard({ review }: { review: Review }) {
             </span>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          {review.reviewerDisplayName ?? "Masked reviewer"}
+        </p>
         <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
           <span>Taste: {review.detailRatings.taste}/5</span>
           <span>Value: {review.detailRatings.price}/5</span>

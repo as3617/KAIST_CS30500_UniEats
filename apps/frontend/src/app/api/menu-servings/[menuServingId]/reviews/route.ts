@@ -8,13 +8,30 @@ import type { PaginatedData, Review } from "@/types";
 
 type RouteParams = { params: { menuServingId: string } };
 
+function maskReviewerId(userId?: string) {
+  const value = userId?.trim() || "reviewer";
+  return `${value.slice(0, 1)}***${value.slice(-1)}`;
+}
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   if (!shouldUseMockApi()) return proxyToBackend(request);
 
   const serving = menuServingsStore.find((s) => s.id === params.menuServingId);
   if (!serving) return errorJson(404, "NOT_FOUND", "menu serving not found");
 
-  const reviews = reviewsStore.filter((r) => r.menuServingId === params.menuServingId);
+  const reviews = reviewsStore
+    .filter((r) => r.menuServingId === params.menuServingId)
+    .map(({ userId, receiptId: _receiptId, managerReply, ...review }) => ({
+      ...review,
+      reviewerDisplayName: maskReviewerId(userId),
+      managerReply: managerReply
+        ? {
+            content: managerReply.content,
+            repliedAt: managerReply.repliedAt,
+            updatedAt: managerReply.updatedAt,
+          }
+        : undefined,
+    }));
   const result: PaginatedData<Review> = {
     items: reviews,
     page: 1,
