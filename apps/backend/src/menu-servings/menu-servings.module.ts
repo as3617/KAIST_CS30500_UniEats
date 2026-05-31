@@ -8,6 +8,7 @@ import {
 import { Cafeteria, CafeteriaSchema } from "../cafeterias/schemas/cafeteria.schema";
 import { Meal, MealSchema } from "../meals/schemas/meal.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
+import { ViewHistoriesModule } from "../view-histories/view-histories.module";
 import { MenuServingsController } from "./menu-servings.controller";
 import { MenuServingsService } from "./menu-servings.service";
 import { MenuServing, MenuServingSchema } from "./schemas/menu-serving.schema";
@@ -15,6 +16,7 @@ import { MenuServing, MenuServingSchema } from "./schemas/menu-serving.schema";
 @Module({
   imports: [
     AuthModule,
+    ViewHistoriesModule,
     MongooseModule.forFeature([
       { name: MenuServing.name, schema: MenuServingSchema },
       { name: Meal.name, schema: MealSchema },
