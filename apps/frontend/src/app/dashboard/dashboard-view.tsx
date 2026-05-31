@@ -38,7 +38,11 @@ import type {
   WeeklyBestItem,
 } from "@/types";
 
-export function DashboardView() {
+type DashboardViewProps = {
+  initialCafeteriaId?: string;
+};
+
+export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
   const today = useMemo(() => todayInSeoul(), []);
   const [items, setItems] = useState<MenuServing[]>([]);
   const [user, setUser] = useState<Pick<
@@ -56,7 +60,7 @@ export function DashboardView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState<CategoryCode | "">("");
   const [dietaryLabel, setDietaryLabel] = useState<DietaryLabelCode | "">("");
-  const [cafeteriaId, setCafeteriaId] = useState("");
+  const [cafeteriaId, setCafeteriaId] = useState(initialCafeteriaId);
   const [mealTime, setMealTime] = useState<MealTime | "">("");
   const [hideAllergyConflicts, setHideAllergyConflicts] = useState(false);
   const hasActiveFilters = Boolean(

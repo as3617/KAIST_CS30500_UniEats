@@ -192,7 +192,7 @@ function CafeteriaPanel({
           ) : null}
         </div>
         <Button asChild className="w-full">
-          <Link href="/dashboard">
+          <Link href={`/dashboard?cafeteriaId=${encodeURIComponent(cafeteria.id)}`}>
             <UtensilsCrossed className="h-4 w-4" />
             Browse menus
           </Link>
