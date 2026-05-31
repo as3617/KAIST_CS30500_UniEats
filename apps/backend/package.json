@@ -5,7 +5,10 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main.js"
+    "start:prod": "node dist/main.js",
+    "seed:kaist": "node dist/seed/seed-kaist.js",
+    "sync:kaist-menu": "node dist/seed/sync-kaist-daily-menu.js",
+    "seed:kaist:all": "node dist/seed/seed-kaist.js && node dist/seed/sync-kaist-daily-menu.js"
   },
   "dependencies": {
     "@nestjs/common": "latest",

@@ -95,7 +95,7 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
     try {
       const result = await apiFetch<Receipt>(`/receipts/${receipt.id}/confirm`, {
         method: "POST",
-        body: { menuServingId: confirmedMenuServingId },
+        body: { confirmedMenuServingId },
       });
       setReceipt(result);
       setStep("write");

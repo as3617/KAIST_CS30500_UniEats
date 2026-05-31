@@ -2,8 +2,10 @@ import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument, Types } from "mongoose";
 import {
   MEAL_TIMES,
+  MENU_SOURCES,
   MENU_SERVING_STATUSES,
   MealTime,
+  MenuSource,
   MenuServingStatus,
 } from "../../common/enums";
 
@@ -43,6 +45,18 @@ export class MenuServing {
   @Prop({ type: Number, default: 0, min: 0 })
   verifiedReviewCount: number;
 
+  @Prop({ type: String, enum: MENU_SOURCES, default: MenuSource.FIXED_MENU })
+  source: MenuSource;
+
+  @Prop({ trim: true })
+  sourceExternalKey?: string;
+
+  @Prop({ trim: true })
+  sourceUrl?: string;
+
+  @Prop({ type: Date })
+  lastSyncedAt?: Date;
+
   @Prop({ type: Types.ObjectId, ref: "User", required: true })
   createdBy: Types.ObjectId;
 }
@@ -56,3 +70,10 @@ MenuServingSchema.index(
 MenuServingSchema.index({ date: 1, status: 1 });
 MenuServingSchema.index({ mealId: 1 });
 MenuServingSchema.index({ averageRating: -1, verifiedReviewCount: -1 });
+MenuServingSchema.index(
+  { source: 1, sourceExternalKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { sourceExternalKey: { $type: "string" } },
+  },
+);

@@ -70,6 +70,11 @@ export enum MenuServingStatus {
   HIDDEN = "HIDDEN",
 }
 
+export enum MenuSource {
+  DAILY_MENU = "DAILY_MENU",
+  FIXED_MENU = "FIXED_MENU",
+}
+
 export enum OcrProvider {
   FAKE = "FAKE",
   CLOVA = "CLOVA",
@@ -104,6 +109,7 @@ export const USER_ROLES = Object.values(UserRole);
 export const AUTH_TOKEN_TYPES = Object.values(AuthTokenType);
 export const MEAL_TIMES = Object.values(MealTime);
 export const MENU_SERVING_STATUSES = Object.values(MenuServingStatus);
+export const MENU_SOURCES = Object.values(MenuSource);
 export const OCR_PROVIDERS = Object.values(OcrProvider);
 export const RECEIPT_STATUSES = Object.values(ReceiptStatus);
 export const MANAGER_ROLES = Object.values(ManagerRole);

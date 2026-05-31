@@ -21,11 +21,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const body = await request.json();
-  const { menuServingId } = body as { menuServingId?: string };
-  if (!menuServingId) return errorJson(400, "VALIDATION_ERROR", "menuServingId is required");
+  const { confirmedMenuServingId, menuServingId } = body as {
+    confirmedMenuServingId?: string;
+    menuServingId?: string;
+  };
+  const selectedMenuServingId = confirmedMenuServingId ?? menuServingId;
+  if (!selectedMenuServingId) {
+    return errorJson(400, "VALIDATION_ERROR", "confirmedMenuServingId is required");
+  }
 
   receipt.status = "VERIFIED";
-  receipt.confirmedMenuServingId = menuServingId;
+  receipt.confirmedMenuServingId = selectedMenuServingId;
 
   return okJson(receipt);
 }
