@@ -46,6 +46,53 @@ services:
     networks:
       - unieats
 
+  menu-sync:
+    build:
+      context: ..
+      dockerfile: deploy/backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongo:27017/unieats
+      KAIST_MENU_SYNC_INTERVAL_SECONDS: ${KAIST_MENU_SYNC_INTERVAL_SECONDS:-86400}
+      KAIST_MENU_SYNC_RETRY_SECONDS: ${KAIST_MENU_SYNC_RETRY_SECONDS:-300}
+      KAIST_MENU_SYNC_DAYS: ${KAIST_MENU_SYNC_DAYS:-7}
+      KAIST_MENU_SYNC_START_DATE: ${KAIST_MENU_SYNC_START_DATE:-}
+    command:
+      - sh
+      - -c
+      - |
+        set -u
+        retry_seconds="$${KAIST_MENU_SYNC_RETRY_SECONDS:-300}"
+        interval_seconds="$${KAIST_MENU_SYNC_INTERVAL_SECONDS:-86400}"
+        sync_days="$${KAIST_MENU_SYNC_DAYS:-7}"
+
+        echo "[menu-sync] bootstrapping KAIST seed data"
+        until npm run seed:kaist; do
+          echo "[menu-sync] seed failed; retrying in $${retry_seconds}s"
+          sleep "$${retry_seconds}"
+        done
+
+        while true; do
+          sync_args="--days=$${sync_days}"
+          if [ -n "$${KAIST_MENU_SYNC_START_DATE:-}" ]; then
+            sync_args="--start=$${KAIST_MENU_SYNC_START_DATE} $${sync_args}"
+          fi
+
+          echo "[menu-sync] running KAIST menu sync"
+          if npm run sync:kaist-menu -- $${sync_args}; then
+            echo "[menu-sync] sync complete; sleeping $${interval_seconds}s"
+            sleep "$${interval_seconds}"
+          else
+            echo "[menu-sync] sync failed; retrying in $${retry_seconds}s"
+            sleep "$${retry_seconds}"
+          fi
+        done
+    depends_on:
+      - mongo
+    networks:
+      - unieats
+
   mongo:
     image: mongo:7
     restart: unless-stopped
