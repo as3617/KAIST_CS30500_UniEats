@@ -28,6 +28,20 @@ type MenuItemSeed = {
   dietaryLabels: DietaryLabelCode[];
 };
 
+export type DailyMenuSourceSeed = {
+  cafeteriaKey: string;
+  dvsCd: string;
+  menuNamePrefix: string;
+};
+
+const weekdayHours = (ranges: Array<{ open: string; close: string }>) => ({
+  monday: ranges,
+  tuesday: ranges,
+  wednesday: ranges,
+  thursday: ranges,
+  friday: ranges,
+});
+
 const weekdayBreakfastLunchDinner = {
   monday: [
     { open: "08:00", close: "09:00" },
@@ -56,6 +70,40 @@ const weekdayBreakfastLunchDinner = {
   ],
 };
 
+const westBreakfastLunchDinner = weekdayHours([
+  { open: "08:00", close: "09:30" },
+  { open: "11:30", close: "13:30" },
+  { open: "17:00", close: "19:00" },
+]);
+
+const eastStudentBreakfastLunchDinner = weekdayHours([
+  { open: "08:00", close: "10:00" },
+  { open: "11:30", close: "14:00" },
+  { open: "17:30", close: "19:00" },
+]);
+
+const eastFacultyLunchDinner = weekdayHours([
+  { open: "11:30", close: "13:30" },
+  { open: "17:30", close: "19:00" },
+]);
+
+const facultyHallLunchDinner = weekdayHours([
+  { open: "11:20", close: "13:30" },
+  { open: "17:30", close: "18:30" },
+]);
+
+const munjiBreakfastLunchDinner = weekdayHours([
+  { open: "07:30", close: "09:00" },
+  { open: "11:00", close: "13:00" },
+  { open: "17:00", close: "18:40" },
+]);
+
+const hwaamBreakfastLunchDinner = weekdayHours([
+  { open: "07:30", close: "09:00" },
+  { open: "11:30", close: "13:00" },
+  { open: "17:30", close: "18:40" },
+]);
+
 const kaimaruFoodCourtHours = {
   monday: [{ open: "10:30", close: "20:00" }],
   tuesday: [{ open: "10:30", close: "20:00" }],
@@ -71,6 +119,55 @@ export const KAIST_CAFETERIA_SEEDS: CafeteriaSeed[] = [
     description: "KAIST 학생식당(N11) 1층 북측 카페테리아.",
     location: { building: "N11", floor: "1F", lat: 36.3736, lng: 127.3608 },
     openingHours: weekdayBreakfastLunchDinner,
+  },
+  {
+    key: "west-cafeteria",
+    name: "서맛골(서측식당)",
+    description: "KAIST 공식 식단 페이지에서 일별 식단을 제공하는 서측식당.",
+    location: { building: "서측식당", floor: "1F" },
+    openingHours: westBreakfastLunchDinner,
+  },
+  {
+    key: "east-student-cafeteria",
+    name: "동맛골(동측 학생식당)",
+    description: "KAIST 공식 식단 페이지에서 일별 식단을 제공하는 동측 학생식당.",
+    location: { building: "동측 학생식당", floor: "1F" },
+    openingHours: eastStudentBreakfastLunchDinner,
+  },
+  {
+    key: "east-faculty-cafeteria",
+    name: "동맛골(동측 교직원식당)",
+    description: "KAIST 공식 식단 페이지에서 일별 식단을 제공하는 동측 교직원식당.",
+    location: { building: "동측 교직원식당", floor: "1F" },
+    openingHours: eastFacultyLunchDinner,
+  },
+  {
+    key: "faculty-hall-cafeteria",
+    name: "교수회관",
+    description: "KAIST 공식 식단 페이지에서 일별 식단을 제공하는 교수회관 식당.",
+    location: { building: "교수회관", floor: "1F" },
+    openingHours: facultyHallLunchDinner,
+  },
+  {
+    key: "munji-cafeteria",
+    name: "문지캠퍼스 구내식당",
+    description: "KAIST 공식 식단 페이지에서 일별 식단을 제공하는 문지캠퍼스 구내식당.",
+    location: { building: "문지캠퍼스", floor: "1F" },
+    openingHours: munjiBreakfastLunchDinner,
+  },
+  {
+    key: "hwaam-cafeteria",
+    name: "화암 기숙사 식당",
+    description: "KAIST 공식 식단 페이지에서 일별 식단을 제공하는 화암 기숙사 식당.",
+    location: { building: "화암 기숙사", floor: "1F" },
+    openingHours: hwaamBreakfastLunchDinner,
+  },
+  {
+    key: "seoul-campus-cafeteria",
+    name: "서울캠퍼스 구내식당",
+    description: "KAIST 공식 식단 페이지에서 일별 식단을 제공하는 서울캠퍼스 구내식당.",
+    location: { building: "서울캠퍼스", floor: "1F" },
+    openingHours: weekdayHours([{ open: "11:30", close: "13:30" }]),
   },
   {
     key: "kaimaru-byulridalli",
@@ -156,6 +253,49 @@ export const KAIST_CAFETERIA_SEEDS: CafeteriaSeed[] = [
       saturday: [{ open: "08:00", close: "23:00" }],
       sunday: [{ open: "08:00", close: "23:00" }],
     },
+  },
+];
+
+export const KAIST_DAILY_MENU_SOURCE_SEEDS: DailyMenuSourceSeed[] = [
+  {
+    cafeteriaKey: "kaimaru-north-cafeteria",
+    dvsCd: "fclt",
+    menuNamePrefix: "카이마루",
+  },
+  {
+    cafeteriaKey: "west-cafeteria",
+    dvsCd: "west",
+    menuNamePrefix: "서맛골",
+  },
+  {
+    cafeteriaKey: "east-student-cafeteria",
+    dvsCd: "east1",
+    menuNamePrefix: "동맛골 학생식당",
+  },
+  {
+    cafeteriaKey: "east-faculty-cafeteria",
+    dvsCd: "east2",
+    menuNamePrefix: "동맛골 교직원식당",
+  },
+  {
+    cafeteriaKey: "faculty-hall-cafeteria",
+    dvsCd: "emp",
+    menuNamePrefix: "교수회관",
+  },
+  {
+    cafeteriaKey: "munji-cafeteria",
+    dvsCd: "icc",
+    menuNamePrefix: "문지캠퍼스",
+  },
+  {
+    cafeteriaKey: "hwaam-cafeteria",
+    dvsCd: "hawam",
+    menuNamePrefix: "화암 기숙사",
+  },
+  {
+    cafeteriaKey: "seoul-campus-cafeteria",
+    dvsCd: "seoul",
+    menuNamePrefix: "서울캠퍼스",
   },
 ];
 

@@ -14,11 +14,13 @@ import {
   MenuServingSchema,
 } from "../menu-servings/schemas/menu-serving.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
-import { KAIST_CAFETERIA_SEEDS } from "./kaist-seed-data";
+import {
+  DailyMenuSourceSeed,
+  KAIST_CAFETERIA_SEEDS,
+  KAIST_DAILY_MENU_SOURCE_SEEDS,
+} from "./kaist-seed-data";
 
 const KAIST_MENU_BASE_URL = "https://www.kaist.ac.kr/kr/html/campus/053001.html";
-const KAIMARU_DVS_CD = "fclt";
-const KAIMARU_CAFETERIA_KEY = "kaimaru-north-cafeteria";
 const KAIST_SEED_ADMIN_EMAIL = "seed-admin@kaist.ac.kr";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -79,74 +81,83 @@ async function main() {
   ) as Model<MenuServing>;
 
   const seedUser = await ensureSeedUser(UserModel);
-  const cafeteria = await ensureKaimaruCafeteria(CafeteriaModel);
+  const cafeteriaByKey = await ensureDailyCafeterias(CafeteriaModel);
 
   let fetchedItems = 0;
   let upsertedServings = 0;
   let hiddenStaleServings = 0;
-  const syncedDates: string[] = [];
+  const syncedDates = new Set<string>();
+  const syncedSources = new Set<string>();
 
   for (const date of datesFrom(options.startDate, options.days)) {
-    const sourceUrl = buildDailyMenuUrl(date);
-    const html = await fetchHtml(sourceUrl);
-    const items = parseKaimaruDailyMenuPage(html, date, sourceUrl);
-    fetchedItems += items.length;
+    for (const source of KAIST_DAILY_MENU_SOURCE_SEEDS) {
+      const cafeteria = cafeteriaByKey.get(source.cafeteriaKey);
+      if (!cafeteria) {
+        throw new Error(`daily cafeteria seed is missing: ${source.cafeteriaKey}`);
+      }
 
-    if (items.length === 0) {
-      continue;
-    }
+      const sourceUrl = buildDailyMenuUrl(source.dvsCd, date);
+      const html = await fetchHtml(sourceUrl);
+      const items = parseKaistDailyMenuPage(html, date, sourceUrl, source);
+      fetchedItems += items.length;
 
-    syncedDates.push(date);
-    const activeExternalKeys: string[] = [];
-    for (const item of items) {
-      const meal = await upsertMeal(MealModel, item, seedUser._id);
-      await MenuServingModel.findOneAndUpdate(
+      if (items.length === 0) {
+        continue;
+      }
+
+      syncedDates.add(date);
+      syncedSources.add(source.dvsCd);
+      const activeExternalKeys: string[] = [];
+      for (const item of items) {
+        const meal = await upsertMeal(MealModel, item, seedUser._id);
+        await MenuServingModel.findOneAndUpdate(
+          {
+            source: MenuSource.DAILY_MENU,
+            sourceExternalKey: item.sourceExternalKey,
+          },
+          {
+            $set: {
+              date: item.date,
+              cafeteriaId: cafeteria._id,
+              mealId: meal._id,
+              mealTime: item.mealTime,
+              price: item.price,
+              status: MenuServingStatus.AVAILABLE,
+              source: MenuSource.DAILY_MENU,
+              sourceExternalKey: item.sourceExternalKey,
+              sourceUrl: item.sourceUrl,
+              lastSyncedAt: new Date(),
+              createdBy: seedUser._id,
+            },
+            $setOnInsert: {
+              averageRating: 0,
+              verifiedReviewCount: 0,
+            },
+          },
+          { upsert: true, returnDocument: "after", runValidators: true },
+        )
+          .lean()
+          .exec();
+        activeExternalKeys.push(item.sourceExternalKey);
+        upsertedServings += 1;
+      }
+
+      const staleResult = await MenuServingModel.updateMany(
         {
+          date,
+          cafeteriaId: cafeteria._id,
           source: MenuSource.DAILY_MENU,
-          sourceExternalKey: item.sourceExternalKey,
+          sourceExternalKey: { $nin: activeExternalKeys },
         },
         {
           $set: {
-            date: item.date,
-            cafeteriaId: cafeteria._id,
-            mealId: meal._id,
-            mealTime: item.mealTime,
-            price: item.price,
-            status: MenuServingStatus.AVAILABLE,
-            source: MenuSource.DAILY_MENU,
-            sourceExternalKey: item.sourceExternalKey,
-            sourceUrl: item.sourceUrl,
+            status: MenuServingStatus.HIDDEN,
             lastSyncedAt: new Date(),
-            createdBy: seedUser._id,
-          },
-          $setOnInsert: {
-            averageRating: 0,
-            verifiedReviewCount: 0,
           },
         },
-        { upsert: true, returnDocument: "after", runValidators: true },
-      )
-        .lean()
-        .exec();
-      activeExternalKeys.push(item.sourceExternalKey);
-      upsertedServings += 1;
+      ).exec();
+      hiddenStaleServings += staleResult.modifiedCount;
     }
-
-    const staleResult = await MenuServingModel.updateMany(
-      {
-        date,
-        cafeteriaId: cafeteria._id,
-        source: MenuSource.DAILY_MENU,
-        sourceExternalKey: { $nin: activeExternalKeys },
-      },
-      {
-        $set: {
-          status: MenuServingStatus.HIDDEN,
-          lastSyncedAt: new Date(),
-        },
-      },
-    ).exec();
-    hiddenStaleServings += staleResult.modifiedCount;
   }
 
   console.log(
@@ -154,7 +165,8 @@ async function main() {
       source: "KAIST_OFFICIAL_MENU",
       startDate: options.startDate,
       days: options.days,
-      syncedDates,
+      syncedDates: [...syncedDates],
+      syncedSources: [...syncedSources],
       fetchedItems,
       upsertedServings,
       hiddenStaleServings,
@@ -162,10 +174,11 @@ async function main() {
   );
 }
 
-export function parseKaimaruDailyMenuPage(
+export function parseKaistDailyMenuPage(
   html: string,
   date: string,
   sourceUrl: string,
+  source: DailyMenuSourceSeed,
 ): ParsedMenuItem[] {
   const tableHtml = html.match(/<table[^>]*class=["'][^"']*table[^"']*["'][^>]*>[\s\S]*?<\/table>/i)?.[0];
   if (!tableHtml) {
@@ -181,9 +194,9 @@ export function parseKaimaruDailyMenuPage(
 
   return cells.flatMap((lines, cellIndex) => {
     const mealTime = mealTimeFromHeader(headers[cellIndex] ?? "");
-    return splitMenuSections(lines).map((section, sectionIndex) => {
+    return splitMenuSections(lines, mealTimeLabel(mealTime)).map((section, sectionIndex) => {
       const cleanedItems = cleanMenuItems(section.items);
-      const name = buildMealName(date, mealTime, section.label, cleanedItems);
+      const name = buildMealName(source.menuNamePrefix, date, mealTime, section.label, cleanedItems);
       const ingredients = extractIngredients(cleanedItems);
       const allergens = extractAllergens(cleanedItems);
 
@@ -200,7 +213,7 @@ export function parseKaimaruDailyMenuPage(
         sourceUrl,
         sourceExternalKey: [
           "kaist",
-          KAIMARU_DVS_CD,
+          source.dvsCd,
           date,
           mealTime.toLowerCase(),
           slugify(section.label),
@@ -252,10 +265,20 @@ async function ensureSeedUser(model: Model<User>) {
   return result as DocumentWithId;
 }
 
-async function ensureKaimaruCafeteria(model: Model<Cafeteria>) {
-  const seed = KAIST_CAFETERIA_SEEDS.find((item) => item.key === KAIMARU_CAFETERIA_KEY);
+async function ensureDailyCafeterias(model: Model<Cafeteria>) {
+  const cafeteriaByKey = new Map<string, DocumentWithId>();
+
+  for (const source of KAIST_DAILY_MENU_SOURCE_SEEDS) {
+    cafeteriaByKey.set(source.cafeteriaKey, await ensureCafeteriaByKey(model, source.cafeteriaKey));
+  }
+
+  return cafeteriaByKey;
+}
+
+async function ensureCafeteriaByKey(model: Model<Cafeteria>, cafeteriaKey: string) {
+  const seed = KAIST_CAFETERIA_SEEDS.find((item) => item.key === cafeteriaKey);
   if (!seed) {
-    throw new Error("kaimaru cafeteria seed is missing");
+    throw new Error(`cafeteria seed is missing: ${cafeteriaKey}`);
   }
 
   const result = await model
@@ -276,7 +299,7 @@ async function ensureKaimaruCafeteria(model: Model<Cafeteria>) {
     .exec();
 
   if (!result?._id) {
-    throw new Error("failed to upsert kaimaru cafeteria");
+    throw new Error(`failed to upsert cafeteria ${seed.name}`);
   }
 
   return result as DocumentWithId;
@@ -333,15 +356,19 @@ async function fetchHtml(url: string) {
   return response.text();
 }
 
-function buildDailyMenuUrl(date: string) {
-  return `${KAIST_MENU_BASE_URL}?dvs_cd=${KAIMARU_DVS_CD}&stt_dt=${date}`;
+function buildDailyMenuUrl(dvsCd: string, date: string) {
+  return `${KAIST_MENU_BASE_URL}?dvs_cd=${encodeURIComponent(dvsCd)}&stt_dt=${encodeURIComponent(date)}`;
 }
 
-function splitMenuSections(lines: string[]) {
+function splitMenuSections(lines: string[], fallbackLabel: string) {
   const sections: Array<{ label: string; price: number; items: string[] }> = [];
   let current: { label: string; price: number; items: string[] } | null = null;
 
   for (const line of lines) {
+    if (isIgnorableMenuLine(line)) {
+      continue;
+    }
+
     const heading = parseSectionHeading(line);
     if (heading) {
       if (current && current.items.length > 0) {
@@ -351,21 +378,33 @@ function splitMenuSections(lines: string[]) {
       continue;
     }
 
-    if (current) {
-      current.items.push(line);
+    const price = parsePriceOnly(line);
+    if (price !== null) {
+      current = current ?? { label: fallbackLabel, price: 0, items: [] };
+      if (current.price === 0) {
+        current.price = price;
+      }
+      continue;
     }
+
+    current = current ?? { label: fallbackLabel, price: 0, items: [] };
+    current.items.push(line);
   }
 
   if (current && current.items.length > 0) {
     sections.push(current);
   }
 
-  return sections;
+  return sections.map((section) => ({
+    ...section,
+    price: section.price || inferPrice(section.items),
+    items: section.items.filter((item) => parsePriceOnly(item) === null),
+  }));
 }
 
 function parseSectionHeading(line: string) {
   const match = line.match(
-    /^(천원의 아침밥|조식|중식|석식|자율배식|[A-Z]코너|일품|특식)[^()]*\(([\d,]+)원\)/,
+    /^((?:\d층\s*)?(?:(?:조식|중식|석식)\d*|천원의 아침밥|자율배식|[A-Z]코너|\d코너|일품|특식))(?:[^()[\]]*[\(\[]([\d,]+)원[\)\]])?/,
   );
   if (!match) {
     return null;
@@ -373,8 +412,23 @@ function parseSectionHeading(line: string) {
 
   return {
     label: normalizeText(match[1]),
-    price: Number(match[2].replace(/,/g, "")),
+    price: match[2] ? Number(match[2].replace(/,/g, "")) : 0,
   };
+}
+
+function parsePriceOnly(line: string) {
+  const match = line.match(/^[\(\[]?\s*([\d,]+)원\s*[\)\]]?$/);
+  return match ? Number(match[1].replace(/,/g, "")) : null;
+}
+
+function inferPrice(items: string[]) {
+  for (const item of items) {
+    const match = item.match(/([\d,]+)원/);
+    if (match) {
+      return Number(match[1].replace(/,/g, ""));
+    }
+  }
+  return 0;
 }
 
 function htmlCellToLines(html: string) {
@@ -396,13 +450,17 @@ function cleanMenuItems(items: string[]) {
     .map((item) => item.replace(/\/\*.*$/, ""))
     .map(normalizeText)
     .filter(Boolean)
+    .filter((item) => !isIgnorableMenuLine(item))
+    .filter((item) => parsePriceOnly(item) === null)
     .filter((item) => !item.startsWith("*"))
     .filter((item) => !/^\(\d+kcal\)$/i.test(item));
 }
 
 function extractIngredients(items: string[]) {
   return items
+    .map(stripAllergyMarkers)
     .map((item) => item.replace(/\([^)]*\)/g, ""))
+    .map((item) => item.replace(/[\[\(]?[\d,]+원[\]\)]?/g, ""))
     .map((item) => item.replace(/[*&]/g, " "))
     .flatMap((item) => item.split(/[\/,]/))
     .map(normalizeText)
@@ -413,8 +471,12 @@ function extractIngredients(items: string[]) {
 function extractAllergens(items: string[]) {
   const found = new Set<AllergyCode>();
   for (const item of items) {
-    for (const group of item.matchAll(/\(([\d,\s]+)\)/g)) {
-      for (const number of group[1].split(",").map((value) => value.trim())) {
+    const groups = [
+      ...item.matchAll(/\(([\d,\s.]+)\)/g),
+      ...item.matchAll(/(?:^|[\s/])((?:\d{1,2})(?:[,.]\s*\d{1,2})+)(?=$|[\s/*])/g),
+    ];
+    for (const group of groups) {
+      for (const number of group[1].split(/[,.]/).map((value) => value.trim())) {
         const allergy = ALLERGY_BY_NUMBER[number];
         if (allergy) {
           found.add(allergy);
@@ -426,17 +488,23 @@ function extractAllergens(items: string[]) {
 }
 
 function buildMealName(
+  prefix: string,
   date: string,
   mealTime: MealTime,
   sectionLabel: string,
   items: string[],
 ) {
   const coreItems = items
+    .map(stripAllergyMarkers)
     .map((item) => item.replace(/\([^)]*\)/g, ""))
+    .map((item) => item.replace(/[\[\(]?[\d,]+원[\]\)]?/g, ""))
+    .map(normalizeText)
     .filter((item) => !isSideDish(item))
     .slice(0, 2);
   const suffix = coreItems.length > 0 ? ` - ${coreItems.join(", ")}` : "";
-  return `카이마루 ${mealTimeLabel(mealTime)} ${sectionLabel} ${date}${suffix}`;
+  const timeLabel = mealTimeLabel(mealTime);
+  const section = sectionLabel === timeLabel ? timeLabel : `${timeLabel} ${sectionLabel}`;
+  return `${prefix} ${section} ${date}${suffix}`;
 }
 
 function inferCategory(items: string[]) {
@@ -460,6 +528,21 @@ function isSideDish(item: string) {
   return /쌀밥|흑미밥|맛김치|백김치|김치|야채샐러드|드레싱|도시락김|숭늉|하루과일|주시쿨|수제피클|음료/i.test(
     item,
   );
+}
+
+function isIgnorableMenuLine(item: string) {
+  return (
+    item === "-" ||
+    item === "-->" ||
+    item.startsWith("- ") ||
+    item.startsWith("★") ||
+    item.startsWith("※") ||
+    /칼로리|원산지|알레르기|상기 메뉴는|운영시간|문의|캠페인|후원|지원금|학생증|소지 부탁/i.test(item)
+  );
+}
+
+function stripAllergyMarkers(item: string) {
+  return item.replace(/(?:^|[\s/])(?:\d{1,2})(?:[,.]\s*\d{1,2})+(?=$|[\s/*])/g, " ");
 }
 
 function mealTimeFromHeader(header: string) {
