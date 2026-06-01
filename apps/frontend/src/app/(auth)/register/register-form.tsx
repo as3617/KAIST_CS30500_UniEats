@@ -23,6 +23,8 @@ type RegisterResponse = {
   isEmailVerified: boolean;
 };
 
+const MOCK_VERIFY_TOKEN = "mock-email-token";
+
 export function RegisterForm() {
   const [email, setEmail] = useState("");
   const [nickname, setNickname] = useState("");
@@ -148,6 +150,17 @@ export function RegisterForm() {
               className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm text-primary"
             >
               {success}
+              {process.env.NEXT_PUBLIC_USE_MOCK === "true" ? (
+                <>
+                  {" "}
+                  <Link
+                    href={`/verify-email?token=${MOCK_VERIFY_TOKEN}`}
+                    className="font-medium underline"
+                  >
+                    Open mock verification link
+                  </Link>
+                </>
+              ) : null}
             </p>
           ) : null}
         </CardContent>
