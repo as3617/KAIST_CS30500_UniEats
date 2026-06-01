@@ -10,6 +10,8 @@ import {
 import { ReceiptsController } from "./receipts.controller";
 import { ReceiptsService } from "./receipts.service";
 import { Receipt, ReceiptSchema } from "./schemas/receipt.schema";
+import { OCR_CLIENT } from "./ocr-clients/ocr-client.interface";
+import { TesseractOcrClient } from "./ocr-clients/tesseract-ocr.client";
 
 @Module({
   imports: [
@@ -22,7 +24,13 @@ import { Receipt, ReceiptSchema } from "./schemas/receipt.schema";
     AuthModule,
   ],
   controllers: [ReceiptsController],
-  providers: [ReceiptsService],
+  providers: [
+    ReceiptsService,
+    {
+      provide: OCR_CLIENT,
+      useClass: TesseractOcrClient,
+    },
+  ],
   exports: [ReceiptsService, MongooseModule],
 })
 export class ReceiptsModule {}

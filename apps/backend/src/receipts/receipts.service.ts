@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -11,8 +12,7 @@ import { MenuServingStatus, OcrProvider, ReceiptStatus } from "../common/enums";
 import { toObjectId } from "../common/object-id";
 import { MenuServing } from "../menu-servings/schemas/menu-serving.schema";
 import { Receipt } from "./schemas/receipt.schema";
-import axios from "axios";
-import FormData from "form-data";
+import { OCR_CLIENT, OcrClient } from "./ocr-clients/ocr-client.interface";
 import { extractDate, matchMenu, extractApprovalNumber } from "./ocr-parser.util";
 
 const MAX_FAKE_OCR_MATCHES = 8;
@@ -37,6 +37,7 @@ export class ReceiptsService {
     @InjectModel(MenuServing.name)
     private readonly menuServingModel: Model<MenuServing>,
     private readonly authService: AuthService,
+    @Inject(OCR_CLIENT) private readonly ocrClient: OcrClient,
   ) {}
 
   async upload(authorization: string | undefined, file?: ReceiptUploadFile) {
@@ -54,7 +55,7 @@ export class ReceiptsService {
     } as any);
 
     if (file?.buffer) {
-      this.sendToOcrServiceAsync(receipt._id.toString(), file).catch(err => {
+      this.ocrClient.processReceiptAsync(receipt._id.toString(), file).catch(err => {
         console.error('Failed to trigger OCR service', err);
       });
     }
@@ -129,22 +130,7 @@ export class ReceiptsService {
     );
   }
 
-  private async sendToOcrServiceAsync(receiptId: string, file: ReceiptUploadFile) {
-    const formData = new FormData();
-    formData.append('receiptId', receiptId);
-    
-    // Internal network URL for the webhook
-    const webhookUrl = process.env.OCR_WEBHOOK_URL || 'http://backend:4000/api/receipts/webhook';
-    formData.append('webhookUrl', webhookUrl);
-    
-    formData.append('image', file.buffer!, file.originalname || 'receipt.jpg');
 
-    const ocrServiceUrl = process.env.OCR_SERVICE_URL || 'http://ocr:5000/process';
-
-    await axios.post(ocrServiceUrl, formData, {
-      headers: formData.getHeaders(),
-    });
-  }
 
   async findById(receiptId: string, authorization: string | undefined) {
     const currentUser = await this.authService.requireUser(authorization, {
