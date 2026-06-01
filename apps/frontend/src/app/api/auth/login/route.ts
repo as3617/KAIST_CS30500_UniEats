@@ -31,14 +31,21 @@ export async function POST(request: NextRequest) {
     return errorJson(401, "INVALID_CREDENTIALS", "Email or password is incorrect");
   }
 
+  const localPart = body.email.split("@")[0].toLowerCase();
+  const role = localPart.startsWith("admin")
+    ? "ADMIN"
+    : localPart.startsWith("manager")
+      ? "MANAGER"
+      : "USER";
+
   const payload: LoginResponse = {
     accessToken: "mock-access-token",
     refreshToken: "mock-refresh-token",
     user: {
-      id: mockUser.id,
+      id: role === "USER" ? mockUser.id : `u_demo_${role.toLowerCase()}`,
       email: body.email,
       nickname: body.email.split("@")[0],
-      role: "USER",
+      role,
       isEmailVerified: true,
     },
   };

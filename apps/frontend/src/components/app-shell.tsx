@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { BottomTabBar } from "./bottom-tab-bar";
 import { TopHeader } from "./top-header";
 
-const AUTH_PATHS = ["/login", "/register"];
+const AUTH_PATHS = ["/login", "/register", "/verify-email"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

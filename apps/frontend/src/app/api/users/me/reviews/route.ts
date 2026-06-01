@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 
 import { proxyToBackend, shouldUseMockApi } from "../../../_utils";
-import { mockMenuServings, mockUser } from "@/mocks/data";
-import { reviewsStore } from "@/mocks/store";
+import { mockUser } from "@/mocks/data";
+import { menuServingsStore, reviewsStore } from "@/mocks/store";
 import { errorJson, okJson } from "@/mocks/respond";
 import type { PaginatedData, Review } from "@/types";
 
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   const myReviews = reviewsStore
     .filter((r) => r.userId === mockUser.id)
     .map((r): UserReview => {
-      const serving = mockMenuServings.find((s) => s.id === r.menuServingId);
+      const serving = menuServingsStore.find((s) => s.id === r.menuServingId);
       return {
         ...r,
         mealName: serving?.meal.name ?? r.mealId,

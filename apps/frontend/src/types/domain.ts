@@ -99,6 +99,7 @@ export type MenuServing = {
   mealTime: MealTime;
   price: number;
   status: MenuServingStatus;
+  stock?: number;
   averageRating: number;
   verifiedReviewCount: number;
   cafeteria: Pick<Cafeteria, "id" | "name">;

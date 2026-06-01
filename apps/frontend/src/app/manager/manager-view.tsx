@@ -6,6 +6,7 @@ import {
   BarChart3,
   CheckCircle2,
   MessageSquareReply,
+  PlusCircle,
   RefreshCw,
   ShieldCheck,
   UtensilsCrossed,
@@ -20,13 +21,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiClientError, api } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
 import { formatPriceKRW, todayInSeoul } from "@/lib/date";
-import { MEAL_TIME_LABELS } from "@/types";
+import {
+  ALLERGY_CODES,
+  ALLERGY_LABELS,
+  CATEGORY_CODES,
+  CATEGORY_LABELS,
+  DIETARY_LABEL_CODES,
+  DIETARY_LABELS,
+  MEAL_TIMES,
+  MEAL_TIME_LABELS,
+  MENU_SERVING_STATUSES,
+} from "@/types";
 import type {
+  AllergyCode,
   Cafeteria,
+  CategoryCode,
+  DietaryLabelCode,
+  Meal,
+  MealTime,
   MenuServing,
   MenuServingStatus,
   PaginatedData,
@@ -39,6 +56,52 @@ type ManagerReview = Review & {
   cafeteriaName: string;
 };
 
+type ManagedCafeteria = {
+  cafeteriaId: string;
+  name: string;
+  permissions?: string[];
+};
+
+type MenuCreateForm = {
+  name: string;
+  description: string;
+  category: CategoryCode;
+  ingredients: string;
+  allergens: AllergyCode[];
+  dietaryLabels: DietaryLabelCode[];
+  calories: string;
+  carbohydrate: string;
+  protein: string;
+  fat: string;
+  sodium: string;
+  date: string;
+  mealTime: MealTime;
+  price: string;
+  stock: string;
+  status: MenuServingStatus;
+};
+
+function createInitialMenuForm(date: string): MenuCreateForm {
+  return {
+    name: "",
+    description: "",
+    category: "KOREAN",
+    ingredients: "",
+    allergens: [],
+    dietaryLabels: [],
+    calories: "",
+    carbohydrate: "",
+    protein: "",
+    fat: "",
+    sodium: "",
+    date,
+    mealTime: "LUNCH",
+    price: "",
+    stock: "",
+    status: "AVAILABLE",
+  };
+}
+
 export function ManagerView() {
   const today = useMemo(() => todayInSeoul(), []);
   const [user, setUser] = useState<Pick<User, "nickname" | "role"> | null>(null);
@@ -47,6 +110,10 @@ export function ManagerView() {
   const [servings, setServings] = useState<MenuServing[]>([]);
   const [reviews, setReviews] = useState<ManagerReview[]>([]);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [menuForm, setMenuForm] = useState<MenuCreateForm>(() =>
+    createInitialMenuForm(today),
+  );
+  const [isCafeteriaLocked, setIsCafeteriaLocked] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,23 +125,66 @@ export function ManagerView() {
   const stats = useMemo(() => buildStats(servings, reviews), [servings, reviews]);
 
   useEffect(() => {
-    setUser(authStorage.getUser());
-  }, []);
-
-  useEffect(() => {
     let isCurrent = true;
+    const currentUser = authStorage.getUser();
+    setUser(currentUser);
 
-    api
-      .get<Cafeteria[]>("/cafeterias")
-      .then((data) => {
+    async function loadCafeteriaOptions() {
+      if (!currentUser) {
         if (!isCurrent) return;
-        setCafeterias(data);
-        setSelectedCafeteriaId(data[0]?.id ?? "");
-      })
-      .catch((err) => {
+        setCafeterias([]);
+        setSelectedCafeteriaId("");
+        setIsCafeteriaLocked(true);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        if (currentUser.role === "MANAGER") {
+          const managed = await api.get<ManagedCafeteria | null>(
+            "/users/me/managed-cafeteria",
+          );
+          if (!isCurrent) return;
+          if (!managed) {
+            setCafeterias([]);
+            setSelectedCafeteriaId("");
+            setIsCafeteriaLocked(true);
+            setError("No cafeteria is assigned to this manager account.");
+            setIsLoading(false);
+            return;
+          }
+          setCafeterias([managedCafeteriaToOption(managed)]);
+          setSelectedCafeteriaId(managed.cafeteriaId);
+          setIsCafeteriaLocked(true);
+          return;
+        }
+
+        if (currentUser.role === "ADMIN") {
+          const data = await api.get<Cafeteria[]>("/cafeterias");
+          if (!isCurrent) return;
+          setCafeterias(data);
+          setSelectedCafeteriaId(data[0]?.id ?? "");
+          setIsCafeteriaLocked(false);
+          if (data.length === 0) {
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        if (!isCurrent) return;
+        setCafeterias([]);
+        setSelectedCafeteriaId("");
+        setIsCafeteriaLocked(true);
+        setError("Manager or admin account required.");
+        setIsLoading(false);
+      } catch (err) {
         if (!isCurrent) return;
         setError(err instanceof ApiClientError ? err.message : "Failed to load cafeterias");
-      });
+        setIsLoading(false);
+      }
+    }
+
+    loadCafeteriaOptions();
 
     return () => {
       isCurrent = false;
@@ -189,6 +299,70 @@ export function ManagerView() {
     }
   }
 
+  async function createMenuServing(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedCafeteriaId) return;
+
+    const price = Number(menuForm.price);
+    if (!Number.isFinite(price) || price < 0) {
+      setError("Price must be a non-negative number.");
+      return;
+    }
+
+    const stock = menuForm.stock.trim() ? Number(menuForm.stock) : undefined;
+    if (
+      stock !== undefined &&
+      (!Number.isInteger(stock) || stock < 0)
+    ) {
+      setError("Stock must be a non-negative whole number.");
+      return;
+    }
+
+    setIsSaving("create-menu");
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const meal = await api.post<Meal>("/meals", {
+        name: menuForm.name,
+        description: menuForm.description || undefined,
+        category: menuForm.category,
+        ingredients: parseCommaList(menuForm.ingredients),
+        allergens: menuForm.allergens,
+        dietaryLabels: menuForm.dietaryLabels,
+        nutrition: buildNutrition(menuForm),
+      });
+
+      const serving = await api.post<MenuServing>("/menu-servings", {
+        mealId: meal.id,
+        cafeteriaId: selectedCafeteriaId,
+        date: menuForm.date,
+        mealTime: menuForm.mealTime,
+        price,
+        stock,
+        status: menuForm.status,
+      });
+
+      if (
+        serving.cafeteria.id === selectedCafeteriaId &&
+        serving.date === today
+      ) {
+        setServings((current) => [serving, ...current]);
+      }
+      setMenuForm((current) => ({
+        ...createInitialMenuForm(today),
+        date: current.date,
+        mealTime: current.mealTime,
+        status: current.status,
+      }));
+      setSuccess(`${serving.meal.name} has been added to the menu.`);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to create menu");
+    } finally {
+      setIsSaving(null);
+    }
+  }
+
   return (
     <main className="container max-w-6xl space-y-6 py-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -229,6 +403,7 @@ export function ManagerView() {
               value={selectedCafeteriaId}
               onChange={(event) => setSelectedCafeteriaId(event.target.value)}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              disabled={isCafeteriaLocked}
             >
               {cafeterias.map((cafeteria) => (
                 <option key={cafeteria.id} value={cafeteria.id}>
@@ -264,6 +439,24 @@ export function ManagerView() {
         <p className="text-sm text-muted-foreground">Loading manager dashboard...</p>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+          <section className="space-y-4 lg:col-span-2">
+            <SectionHeader
+              icon={<PlusCircle className="h-4 w-4" />}
+              title="Register menu"
+              description="Create a meal record and schedule it for a cafeteria service."
+            />
+            <MenuCreateFormCard
+              form={menuForm}
+              cafeterias={cafeterias}
+              cafeteriaId={selectedCafeteriaId}
+              isCafeteriaLocked={isCafeteriaLocked}
+              isSaving={isSaving === "create-menu"}
+              onChangeForm={setMenuForm}
+              onChangeCafeteria={setSelectedCafeteriaId}
+              onSubmit={createMenuServing}
+            />
+          </section>
+
           <section className="space-y-4">
             <SectionHeader
               icon={<UtensilsCrossed className="h-4 w-4" />}
@@ -319,6 +512,379 @@ export function ManagerView() {
         </div>
       )}
     </main>
+  );
+}
+
+function MenuCreateFormCard({
+  form,
+  cafeterias,
+  cafeteriaId,
+  isCafeteriaLocked,
+  isSaving,
+  onChangeForm,
+  onChangeCafeteria,
+  onSubmit,
+}: {
+  form: MenuCreateForm;
+  cafeterias: Cafeteria[];
+  cafeteriaId: string;
+  isCafeteriaLocked: boolean;
+  isSaving: boolean;
+  onChangeForm: React.Dispatch<React.SetStateAction<MenuCreateForm>>;
+  onChangeCafeteria: (cafeteriaId: string) => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <Card>
+      <form onSubmit={onSubmit}>
+        <CardContent className="space-y-5 p-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="new-meal-name">Meal name</Label>
+              <Input
+                id="new-meal-name"
+                value={form.name}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+                placeholder="Spicy tofu stew"
+                required
+                disabled={isSaving}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-meal-category">Cuisine</Label>
+              <select
+                id="new-meal-category"
+                value={form.category}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    category: event.target.value as CategoryCode,
+                  }))
+                }
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                disabled={isSaving}
+              >
+                {CATEGORY_CODES.map((value) => (
+                  <option key={value} value={value}>
+                    {CATEGORY_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="new-meal-description">Description</Label>
+            <textarea
+              id="new-meal-description"
+              value={form.description}
+              onChange={(event) =>
+                onChangeForm((current) => ({
+                  ...current,
+                  description: event.target.value,
+                }))
+              }
+              rows={2}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              placeholder="Short menu note for diners"
+              disabled={isSaving}
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+            <div className="space-y-2">
+              <Label htmlFor="new-menu-cafeteria">Cafeteria</Label>
+              <select
+                id="new-menu-cafeteria"
+                value={cafeteriaId}
+                onChange={(event) => onChangeCafeteria(event.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                disabled={isSaving || isCafeteriaLocked}
+                required
+              >
+                {cafeterias.map((cafeteria) => (
+                  <option key={cafeteria.id} value={cafeteria.id}>
+                    {cafeteria.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-menu-date">Date</Label>
+              <Input
+                id="new-menu-date"
+                type="date"
+                value={form.date}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    date: event.target.value,
+                  }))
+                }
+                required
+                disabled={isSaving}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-menu-time">Meal time</Label>
+              <select
+                id="new-menu-time"
+                value={form.mealTime}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    mealTime: event.target.value as MealTime,
+                  }))
+                }
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                disabled={isSaving}
+              >
+                {MEAL_TIMES.map((value) => (
+                  <option key={value} value={value}>
+                    {MEAL_TIME_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-menu-status">Status</Label>
+              <select
+                id="new-menu-status"
+                value={form.status}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    status: event.target.value as MenuServingStatus,
+                  }))
+                }
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                disabled={isSaving}
+              >
+                {MENU_SERVING_STATUSES.map((value) => (
+                  <option key={value} value={value}>
+                    {value === "SOLD_OUT" ? "Sold out" : value === "HIDDEN" ? "Hidden" : "Available"}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[1fr_1fr_2fr]">
+            <div className="space-y-2">
+              <Label htmlFor="new-menu-price">Price</Label>
+              <Input
+                id="new-menu-price"
+                type="number"
+                min={0}
+                step={100}
+                value={form.price}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    price: event.target.value,
+                  }))
+                }
+                placeholder="5200"
+                required
+                disabled={isSaving}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-menu-stock">Stock</Label>
+              <Input
+                id="new-menu-stock"
+                type="number"
+                min={0}
+                step={1}
+                value={form.stock}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    stock: event.target.value,
+                  }))
+                }
+                placeholder="100"
+                disabled={isSaving}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-meal-ingredients">Ingredients</Label>
+              <Input
+                id="new-meal-ingredients"
+                value={form.ingredients}
+                onChange={(event) =>
+                  onChangeForm((current) => ({
+                    ...current,
+                    ingredients: event.target.value,
+                  }))
+                }
+                placeholder="tofu, kimchi, rice"
+                required
+                disabled={isSaving}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <CheckboxGrid
+              label="Allergens"
+              values={ALLERGY_CODES}
+              selected={form.allergens}
+              labels={ALLERGY_LABELS}
+              disabled={isSaving}
+              onChange={(allergens) =>
+                onChangeForm((current) => ({ ...current, allergens }))
+              }
+            />
+            <CheckboxGrid
+              label="Dietary labels"
+              values={DIETARY_LABEL_CODES}
+              selected={form.dietaryLabels}
+              labels={DIETARY_LABELS}
+              disabled={isSaving}
+              onChange={(dietaryLabels) =>
+                onChangeForm((current) => ({ ...current, dietaryLabels }))
+              }
+            />
+          </div>
+
+          <div className="space-y-3">
+            <Label>Nutrition</Label>
+            <div className="grid gap-3 sm:grid-cols-5">
+              <NutritionInput
+                label="Calories"
+                field="calories"
+                value={form.calories}
+                disabled={isSaving}
+                onChangeForm={onChangeForm}
+              />
+              <NutritionInput
+                label="Carbs"
+                field="carbohydrate"
+                value={form.carbohydrate}
+                disabled={isSaving}
+                onChangeForm={onChangeForm}
+              />
+              <NutritionInput
+                label="Protein"
+                field="protein"
+                value={form.protein}
+                disabled={isSaving}
+                onChangeForm={onChangeForm}
+              />
+              <NutritionInput
+                label="Fat"
+                field="fat"
+                value={form.fat}
+                disabled={isSaving}
+                onChangeForm={onChangeForm}
+              />
+              <NutritionInput
+                label="Sodium"
+                field="sodium"
+                value={form.sodium}
+                disabled={isSaving}
+                onChangeForm={onChangeForm}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button type="submit" disabled={isSaving || !cafeteriaId}>
+              <PlusCircle className="h-4 w-4" />
+              {isSaving ? "Registering..." : "Register menu"}
+            </Button>
+          </div>
+        </CardContent>
+      </form>
+    </Card>
+  );
+}
+
+function CheckboxGrid<T extends string>({
+  label,
+  values,
+  selected,
+  labels,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  values: readonly T[];
+  selected: T[];
+  labels: Record<T, string>;
+  disabled: boolean;
+  onChange: (values: T[]) => void;
+}) {
+  function toggle(value: T, checked: boolean) {
+    onChange(
+      checked
+        ? [...selected, value]
+        : selected.filter((selectedValue) => selectedValue !== value),
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {values.map((value) => (
+          <label
+            key={value}
+            className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+          >
+            <input
+              type="checkbox"
+              checked={selected.includes(value)}
+              onChange={(event) => toggle(value, event.target.checked)}
+              disabled={disabled}
+              className="h-4 w-4 rounded border-input"
+            />
+            {labels[value]}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NutritionInput({
+  label,
+  field,
+  value,
+  disabled,
+  onChangeForm,
+}: {
+  label: string;
+  field: "calories" | "carbohydrate" | "protein" | "fat" | "sodium";
+  value: string;
+  disabled: boolean;
+  onChangeForm: React.Dispatch<React.SetStateAction<MenuCreateForm>>;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={`nutrition-${field}`} className="text-xs">
+        {label}
+      </Label>
+      <Input
+        id={`nutrition-${field}`}
+        type="number"
+        min={0}
+        value={value}
+        onChange={(event) =>
+          onChangeForm((current) => ({
+            ...current,
+            [field]: event.target.value,
+          }))
+        }
+        disabled={disabled}
+      />
+    </div>
   );
 }
 
@@ -493,4 +1059,29 @@ function buildStats(servings: MenuServing[], reviews: ManagerReview[]) {
     soldOutMenus,
     averageRating: reviews.length > 0 ? average.toFixed(1) : "-",
   };
+}
+
+function managedCafeteriaToOption(managed: ManagedCafeteria): Cafeteria {
+  return {
+    id: managed.cafeteriaId,
+    name: managed.name,
+    location: {},
+    openingHours: {},
+    isActive: true,
+  };
+}
+
+function parseCommaList(value: string) {
+  return [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))];
+}
+
+function buildNutrition(form: MenuCreateForm) {
+  const nutrition: Meal["nutrition"] = {};
+  for (const field of ["calories", "carbohydrate", "protein", "fat", "sodium"] as const) {
+    const value = form[field].trim() ? Number(form[field]) : undefined;
+    if (value !== undefined && Number.isFinite(value)) {
+      nutrition[field] = value;
+    }
+  }
+  return nutrition;
 }

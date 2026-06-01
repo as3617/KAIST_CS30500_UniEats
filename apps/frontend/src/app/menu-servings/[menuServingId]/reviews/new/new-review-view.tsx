@@ -19,6 +19,8 @@ import type { Receipt, Review } from "@/types";
 
 type Step = "upload" | "confirm" | "write" | "done";
 
+const MAX_RECEIPT_IMAGE_BYTES = 5 * 1024 * 1024;
+
 type NewReviewViewProps = {
   menuServingId: string;
 };
@@ -39,10 +41,25 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setIsLoggedIn(!!authStorage.getUser());
   }, []);
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(selectedFile);
+    setPreviewUrl(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [selectedFile]);
 
   if (!isLoggedIn) {
     return (
@@ -68,6 +85,35 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
     );
   }
 
+  function handleFileChange(file: File | null) {
+    setError(null);
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+    if (!isReceiptImage(file)) {
+      setSelectedFile(null);
+      setError("Please choose an image file.");
+      return;
+    }
+    if (file.size > MAX_RECEIPT_IMAGE_BYTES) {
+      setSelectedFile(null);
+      setError("Receipt image must be 5MB or smaller.");
+      return;
+    }
+    setSelectedFile(file);
+  }
+
+  function resetReceiptFlow() {
+    setReceipt(null);
+    setSelectedFile(null);
+    setStep("upload");
+    setError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   async function handleUpload() {
     if (!selectedFile) return;
     setIsSubmitting(true);
@@ -81,6 +127,10 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
       });
       setReceipt(result);
       setStep("confirm");
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Upload failed. Please try again.");
     } finally {
@@ -163,17 +213,33 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
             >
               <Upload className="h-8 w-8 text-muted-foreground" />
               {selectedFile ? (
-                <p className="text-sm font-medium">{selectedFile.name}</p>
+                <div className="space-y-1 text-center">
+                  <p className="text-sm font-medium">{selectedFile.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(selectedFile.size / 1024 / 1024).toFixed(2)}MB
+                  </p>
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">Click to select a receipt image</p>
               )}
             </div>
+            {previewUrl ? (
+              <div className="overflow-hidden rounded-lg border bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewUrl}
+                  alt="Receipt preview"
+                  className="max-h-72 w-full object-contain"
+                />
+              </div>
+            ) : null}
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              capture="environment"
               className="sr-only"
-              onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
             />
             <Button
               onClick={handleUpload}
@@ -182,6 +248,9 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
             >
               {isSubmitting ? "Uploading..." : "Upload Receipt"}
             </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              JPG, PNG, or HEIC images up to 5MB are supported.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -211,31 +280,49 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
             ) : null}
 
             <p className="text-sm font-medium">Which meal is this for?</p>
-            <ul className="space-y-2">
-              {receipt.matchedMenuServings.map((s) => {
-                const isCurrent = s.id === menuServingId;
-                return (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      onClick={() => handleConfirm(s.id)}
-                      disabled={isSubmitting}
-                      className={`w-full rounded-lg border px-4 py-3 text-left text-sm transition-colors hover:border-primary/60 hover:bg-primary/5 ${
-                        isCurrent ? "border-primary bg-primary/5" : "border-border"
-                      }`}
-                    >
-                      <span className="font-medium">{s.mealName}</span>
-                      <span className="ml-2 text-muted-foreground">
-                        {s.cafeteriaName} &middot; {formatPriceKRW(s.price)}
-                      </span>
-                      {isCurrent && (
-                        <span className="ml-2 text-xs text-primary">(current page)</span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            {receipt.matchedMenuServings.length === 0 ? (
+              <div className="rounded-lg border border-dashed px-4 py-6 text-center">
+                <p className="text-sm font-medium">No matching menu found</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Upload a clearer receipt or choose a meal from today&apos;s menu.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={resetReceiptFlow}
+                  className="mt-4"
+                >
+                  Upload another receipt
+                </Button>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {sortMatchedServings(receipt, menuServingId).map((s) => {
+                  const isCurrent = s.id === menuServingId;
+                  return (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleConfirm(s.id)}
+                        disabled={isSubmitting}
+                        className={`w-full rounded-lg border px-4 py-3 text-left text-sm transition-colors hover:border-primary/60 hover:bg-primary/5 ${
+                          isCurrent ? "border-primary bg-primary/5" : "border-border"
+                        }`}
+                      >
+                        <span className="font-medium">{s.mealName}</span>
+                        <span className="ml-2 text-muted-foreground">
+                          {s.cafeteriaName} &middot; {formatPriceKRW(s.price)}
+                        </span>
+                        {isCurrent && (
+                          <span className="ml-2 text-xs text-primary">(current page)</span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </CardContent>
         </Card>
       )}
@@ -376,4 +463,17 @@ function StarRating({
       ))}
     </div>
   );
+}
+
+function isReceiptImage(file: File) {
+  if (file.type.startsWith("image/")) return true;
+  return /\.(heic|heif|jpe?g|png|webp)$/i.test(file.name);
+}
+
+function sortMatchedServings(receipt: Receipt, currentMenuServingId: string) {
+  return [...receipt.matchedMenuServings].sort((a, b) => {
+    if (a.id === currentMenuServingId) return -1;
+    if (b.id === currentMenuServingId) return 1;
+    return 0;
+  });
 }
