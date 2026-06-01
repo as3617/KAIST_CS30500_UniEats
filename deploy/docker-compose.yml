@@ -99,6 +99,18 @@ services:
     networks:
       - unieats
 
+  ocr:
+    build:
+      context: ..
+      dockerfile: deploy/ocr/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 5000
+    expose:
+      - "5000"
+    networks:
+      - unieats
+
   mongo:
     image: mongo:7
     restart: unless-stopped

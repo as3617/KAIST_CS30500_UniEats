@@ -11,6 +11,9 @@ import { MenuServingStatus, OcrProvider, ReceiptStatus } from "../common/enums";
 import { toObjectId } from "../common/object-id";
 import { MenuServing } from "../menu-servings/schemas/menu-serving.schema";
 import { Receipt } from "./schemas/receipt.schema";
+import axios from "axios";
+import FormData from "form-data";
+import { extractDate, matchMenu, extractApprovalNumber } from "./ocr-parser.util";
 
 const MAX_FAKE_OCR_MATCHES = 8;
 
@@ -18,6 +21,7 @@ export type ReceiptUploadFile = {
   originalname?: string;
   mimetype?: string;
   size?: number;
+  buffer?: Buffer;
 };
 
 export interface ReceiptConfirmBody {
@@ -41,32 +45,105 @@ export class ReceiptsService {
     });
     this.validateUploadFile(file);
 
-    const matches = await this.findFakeOcrMatches();
-    if (matches.length === 0) {
-      throw new BadRequestException("no menu serving candidates found for fake OCR");
-    }
-
-    const firstMatch = matches[0];
-    const mealNames = matches
-      .map((match) => this.populatedName(match.mealId))
-      .filter((name): name is string => Boolean(name));
     const receipt = await this.receiptModel.create({
       userId: new Types.ObjectId(currentUser.id),
       imageUrl: this.buildPrivateImageKey(currentUser.id, file?.originalname),
-      ocrProvider: OcrProvider.FAKE,
-      ocrRawText: this.buildFakeOcrText(matches),
-      parsed: {
-        purchasedAt: new Date(),
-        cafeteriaName: firstMatch ? this.populatedName(firstMatch.cafeteriaId) : undefined,
-        mealNames,
-        totalPrice: firstMatch?.price,
-      },
-      matchedMenuServingIds: matches.map((match) => match._id as Types.ObjectId),
-      status: ReceiptStatus.NEED_CONFIRMATION,
+      ocrProvider: OcrProvider.TESSERACT,
+      status: ReceiptStatus.OCR_PROCESSING,
       usedForReview: false,
     } as any);
 
-    return this.toReceiptResponse((receipt as any).toObject(), matches);
+    if (file?.buffer) {
+      this.sendToOcrServiceAsync(receipt._id.toString(), file).catch(err => {
+        console.error('Failed to trigger OCR service', err);
+      });
+    }
+
+    return this.toReceiptResponse((receipt as any).toObject(), []);
+  }
+
+  async handleWebhook(receiptId: string, rawText?: string, error?: string) {
+    const receiptObjectId = toObjectId(receiptId, "receiptId");
+    
+    if (error) {
+       await this.receiptModel.updateOne(
+          { _id: receiptObjectId },
+          { $set: { status: ReceiptStatus.REJECTED, rejectReason: error } }
+       );
+       return;
+    }
+
+    const text = rawText || "";
+    const extractedDate = extractDate(text);
+    const approvalNumber = extractApprovalNumber(text);
+
+    // Duplicate Check
+    if (approvalNumber) {
+      const isDuplicate = await this.receiptModel.exists({
+        "parsed.approvalNumber": approvalNumber,
+        usedForReview: true,
+      });
+
+      if (isDuplicate) {
+        await this.receiptModel.updateOne(
+          { _id: receiptObjectId },
+          { $set: { status: ReceiptStatus.REJECTED, rejectReason: "This receipt has already been used for a review." } }
+        );
+        return;
+      }
+    }
+
+    let parsed: any = {};
+    if (approvalNumber) {
+      parsed.approvalNumber = approvalNumber;
+    }
+    let matchedMenuServingIds: Types.ObjectId[] = [];
+
+    if (extractedDate) {
+      const servings = await this.findServingsByDate(extractedDate);
+      const result = matchMenu(text, servings, 0.5);
+
+      if (result) {
+        const { match } = result;
+        parsed = {
+          ...parsed,
+          purchasedAt: new Date(extractedDate),
+          cafeteriaName: this.populatedName(match.cafeteriaId),
+          mealNames: [this.populatedName(match.mealId)],
+          totalPrice: match.price,
+        };
+        matchedMenuServingIds = [match._id as Types.ObjectId];
+      }
+    }
+
+    await this.receiptModel.updateOne(
+      { _id: receiptObjectId },
+      {
+        $set: {
+          ocrRawText: text,
+          parsed,
+          matchedMenuServingIds,
+          status: ReceiptStatus.NEED_CONFIRMATION,
+        },
+      }
+    );
+  }
+
+  private async sendToOcrServiceAsync(receiptId: string, file: ReceiptUploadFile) {
+    const formData = new FormData();
+    formData.append('receiptId', receiptId);
+    
+    // Internal network URL for the webhook
+    const webhookUrl = process.env.OCR_WEBHOOK_URL || 'http://backend:4000/api/receipts/webhook';
+    formData.append('webhookUrl', webhookUrl);
+    
+    formData.append('image', file.buffer!, file.originalname || 'receipt.jpg');
+
+    const ocrServiceUrl = process.env.OCR_SERVICE_URL || 'http://ocr:5000/process';
+
+    await axios.post(ocrServiceUrl, formData, {
+      headers: formData.getHeaders(),
+    });
   }
 
   async findById(receiptId: string, authorization: string | undefined) {
@@ -216,6 +293,7 @@ export class ReceiptsService {
       confirmedMenuServingId: this.objectIdToString(receipt.confirmedMenuServingId),
       usedForReview: receipt.usedForReview,
       reviewId: this.objectIdToString(receipt.reviewId),
+      rejectReason: receipt.rejectReason,
     };
   }
 

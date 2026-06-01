@@ -79,6 +79,7 @@ export enum OcrProvider {
   FAKE = "FAKE",
   CLOVA = "CLOVA",
   GOOGLE_VISION = "GOOGLE_VISION",
+  TESSERACT = "TESSERACT",
 }
 
 export enum ReceiptStatus {

@@ -58,4 +58,15 @@ export class ReceiptsController {
       "Receipt confirmed",
     );
   }
+
+  @Post("webhook")
+  @HttpCode(HttpStatus.OK)
+  async webhook(@Body() body: any) {
+    const { receiptId, rawText, error } = body;
+    if (!receiptId) {
+       return { success: false, error: 'receiptId is required' };
+    }
+    await this.receiptsService.handleWebhook(receiptId, rawText, error);
+    return ok({}, "Webhook processed successfully");
+  }
 }

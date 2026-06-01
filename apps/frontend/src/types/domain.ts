@@ -173,6 +173,7 @@ export type Receipt = {
   confirmedMenuServingId?: string;
   usedForReview: boolean;
   reviewId?: string;
+  rejectReason?: string;
 };
 
 export type AuthTokens = {

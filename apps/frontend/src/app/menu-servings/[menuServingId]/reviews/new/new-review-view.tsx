@@ -121,11 +121,20 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
     try {
       const formData = new FormData();
       formData.append("image", selectedFile);
-      const result = await apiFetch<Receipt>("/receipts/upload", {
+      let currentReceipt = await apiFetch<Receipt>("/receipts/upload", {
         method: "POST",
         body: formData,
       });
-      setReceipt(result);
+      
+      // Poll until the asynchronous OCR process finishes
+      while (currentReceipt.status === "OCR_PROCESSING") {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        currentReceipt = await apiFetch<Receipt>(`/receipts/${currentReceipt.id}`, {
+          method: "GET",
+        });
+      }
+
+      setReceipt(currentReceipt);
       setStep("confirm");
       setSelectedFile(null);
       if (fileInputRef.current) {
@@ -280,11 +289,25 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
             ) : null}
 
             <p className="text-sm font-medium">Which meal is this for?</p>
-            {receipt.matchedMenuServings.length === 0 ? (
+            {receipt.status === "REJECTED" ? (
+              <div className="rounded-lg border border-dashed border-destructive/50 bg-destructive/5 px-4 py-6 text-center text-destructive">
+                <p className="text-sm font-medium">Upload Rejected</p>
+                <p className="mt-1 text-sm">{receipt.rejectReason || "This receipt could not be accepted."}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={resetReceiptFlow}
+                  className="mt-4 border-destructive/20 text-destructive hover:bg-destructive/10"
+                >
+                  Try another receipt
+                </Button>
+              </div>
+            ) : receipt.matchedMenuServings.length === 0 ? (
               <div className="rounded-lg border border-dashed px-4 py-6 text-center">
-                <p className="text-sm font-medium">No matching menu found</p>
+                <p className="text-sm font-medium">No matching menu or date found</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Upload a clearer receipt or choose a meal from today&apos;s menu.
+                  Please upload a receipt with a clearly visible date and menu name, or manually choose a meal from today&apos;s menu.
                 </p>
                 <Button
                   type="button"
