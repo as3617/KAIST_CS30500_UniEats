@@ -56,6 +56,12 @@ type ManagerReview = Review & {
   cafeteriaName: string;
 };
 
+type ManagedCafeteria = {
+  cafeteriaId: string;
+  name: string;
+  permissions?: string[];
+};
+
 type MenuCreateForm = {
   name: string;
   description: string;
@@ -107,6 +113,7 @@ export function ManagerView() {
   const [menuForm, setMenuForm] = useState<MenuCreateForm>(() =>
     createInitialMenuForm(today),
   );
+  const [isCafeteriaLocked, setIsCafeteriaLocked] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,23 +125,66 @@ export function ManagerView() {
   const stats = useMemo(() => buildStats(servings, reviews), [servings, reviews]);
 
   useEffect(() => {
-    setUser(authStorage.getUser());
-  }, []);
-
-  useEffect(() => {
     let isCurrent = true;
+    const currentUser = authStorage.getUser();
+    setUser(currentUser);
 
-    api
-      .get<Cafeteria[]>("/cafeterias")
-      .then((data) => {
+    async function loadCafeteriaOptions() {
+      if (!currentUser) {
         if (!isCurrent) return;
-        setCafeterias(data);
-        setSelectedCafeteriaId(data[0]?.id ?? "");
-      })
-      .catch((err) => {
+        setCafeterias([]);
+        setSelectedCafeteriaId("");
+        setIsCafeteriaLocked(true);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        if (currentUser.role === "MANAGER") {
+          const managed = await api.get<ManagedCafeteria | null>(
+            "/users/me/managed-cafeteria",
+          );
+          if (!isCurrent) return;
+          if (!managed) {
+            setCafeterias([]);
+            setSelectedCafeteriaId("");
+            setIsCafeteriaLocked(true);
+            setError("No cafeteria is assigned to this manager account.");
+            setIsLoading(false);
+            return;
+          }
+          setCafeterias([managedCafeteriaToOption(managed)]);
+          setSelectedCafeteriaId(managed.cafeteriaId);
+          setIsCafeteriaLocked(true);
+          return;
+        }
+
+        if (currentUser.role === "ADMIN") {
+          const data = await api.get<Cafeteria[]>("/cafeterias");
+          if (!isCurrent) return;
+          setCafeterias(data);
+          setSelectedCafeteriaId(data[0]?.id ?? "");
+          setIsCafeteriaLocked(false);
+          if (data.length === 0) {
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        if (!isCurrent) return;
+        setCafeterias([]);
+        setSelectedCafeteriaId("");
+        setIsCafeteriaLocked(true);
+        setError("Manager or admin account required.");
+        setIsLoading(false);
+      } catch (err) {
         if (!isCurrent) return;
         setError(err instanceof ApiClientError ? err.message : "Failed to load cafeterias");
-      });
+        setIsLoading(false);
+      }
+    }
+
+    loadCafeteriaOptions();
 
     return () => {
       isCurrent = false;
@@ -353,6 +403,7 @@ export function ManagerView() {
               value={selectedCafeteriaId}
               onChange={(event) => setSelectedCafeteriaId(event.target.value)}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              disabled={isCafeteriaLocked}
             >
               {cafeterias.map((cafeteria) => (
                 <option key={cafeteria.id} value={cafeteria.id}>
@@ -398,6 +449,7 @@ export function ManagerView() {
               form={menuForm}
               cafeterias={cafeterias}
               cafeteriaId={selectedCafeteriaId}
+              isCafeteriaLocked={isCafeteriaLocked}
               isSaving={isSaving === "create-menu"}
               onChangeForm={setMenuForm}
               onChangeCafeteria={setSelectedCafeteriaId}
@@ -467,6 +519,7 @@ function MenuCreateFormCard({
   form,
   cafeterias,
   cafeteriaId,
+  isCafeteriaLocked,
   isSaving,
   onChangeForm,
   onChangeCafeteria,
@@ -475,6 +528,7 @@ function MenuCreateFormCard({
   form: MenuCreateForm;
   cafeterias: Cafeteria[];
   cafeteriaId: string;
+  isCafeteriaLocked: boolean;
   isSaving: boolean;
   onChangeForm: React.Dispatch<React.SetStateAction<MenuCreateForm>>;
   onChangeCafeteria: (cafeteriaId: string) => void;
@@ -550,7 +604,7 @@ function MenuCreateFormCard({
                 value={cafeteriaId}
                 onChange={(event) => onChangeCafeteria(event.target.value)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                disabled={isSaving}
+                disabled={isSaving || isCafeteriaLocked}
                 required
               >
                 {cafeterias.map((cafeteria) => (
@@ -1004,6 +1058,16 @@ function buildStats(servings: MenuServing[], reviews: ManagerReview[]) {
     totalMenus: servings.length,
     soldOutMenus,
     averageRating: reviews.length > 0 ? average.toFixed(1) : "-",
+  };
+}
+
+function managedCafeteriaToOption(managed: ManagedCafeteria): Cafeteria {
+  return {
+    id: managed.cafeteriaId,
+    name: managed.name,
+    location: {},
+    openingHours: {},
+    isActive: true,
   };
 }
 

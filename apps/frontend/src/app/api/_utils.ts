@@ -21,7 +21,7 @@ export async function proxyToBackend(request: NextRequest) {
   };
 
   if (request.method !== "GET" && request.method !== "HEAD") {
-    init.body = await request.text();
+    init.body = await request.arrayBuffer();
   }
 
   const response = await fetch(targetUrl, init);
