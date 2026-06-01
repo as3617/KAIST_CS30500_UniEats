@@ -36,9 +36,15 @@ services:
       PORT: 4000
       MONGODB_URI: mongodb://mongo:27017/unieats
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost}
       ACCESS_TOKEN_SECRET: ${ACCESS_TOKEN_SECRET:-}
       ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
       REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-30}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      LOCAL_EMAIL_VERIFY_TOKEN: ${LOCAL_EMAIL_VERIFY_TOKEN:-local-email-verify-token}
+      LOCAL_PASSWORD_RESET_TOKEN: ${LOCAL_PASSWORD_RESET_TOKEN:-local-password-reset-token}
+      LOCAL_PASSWORD_RESET_PASSWORD: ${LOCAL_PASSWORD_RESET_PASSWORD:-UnieatsReset123!}
     expose:
       - "4000"
     depends_on:

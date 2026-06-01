@@ -640,7 +640,16 @@ POST /auth/register
   "data": {
     "userId": "665f...",
     "email": "student@kaist.ac.kr",
-    "isEmailVerified": false
+    "isEmailVerified": false,
+    "emailDelivery": {
+      "mode": "LOCAL_FALLBACK",
+      "sent": false
+    },
+    "localVerification": {
+      "token": "local-email-verify-token",
+      "email": "student@kaist.ac.kr",
+      "verificationLink": "http://localhost/verify-email?token=local-email-verify-token&email=student%40kaist.ac.kr"
+    }
   },
   "message": "Verification email sent"
 }
@@ -652,6 +661,8 @@ POST /auth/register
 - email은 kaist.ac.kr 도메인만 허용
 - password는 hash 후 저장
 - 가입 직후 이메일 인증 토큰 발송
+- SMTP env가 설정되지 않은 local/dev 환경에서는 고정 인증 토큰과 확인 링크를 응답에 포함한다.
+- local/dev 고정 인증 토큰은 email과 함께 검증하며, DB에는 userId scoped hash로 저장한다.
 ```
 
 ---
@@ -660,6 +671,12 @@ POST /auth/register
 
 ```http
 GET /auth/verify-email?token=...
+```
+
+SMTP env가 설정되지 않은 local/dev 환경의 고정 토큰은 email 식별자를 함께 전달한다.
+
+```http
+GET /auth/verify-email?token=local-email-verify-token&email=student@kaist.ac.kr
 ```
 
 #### 응답
@@ -672,6 +689,74 @@ GET /auth/verify-email?token=...
   },
   "message": "Email verified"
 }
+```
+
+---
+
+### 비밀번호 재설정 요청
+
+```http
+POST /auth/password-reset/request
+```
+
+#### 요청
+
+```json
+{
+  "email": "student@kaist.ac.kr"
+}
+```
+
+#### 응답
+
+```json
+{
+  "success": true,
+  "data": {
+    "resetRequested": true,
+    "emailDelivery": {
+      "mode": "LOCAL_FALLBACK",
+      "sent": false
+    },
+    "localPasswordReset": {
+      "password": "UnieatsReset123!",
+      "resetLink": "http://localhost/reset-password?token=local-password-reset-token&email=student%40kaist.ac.kr"
+    }
+  },
+  "message": "Password reset instructions processed"
+}
+```
+
+#### 규칙
+
+```txt
+- 존재하지 않는 이메일이어도 동일한 성공 응답을 반환해 계정 존재 여부를 노출하지 않는다.
+- SMTP env가 설정되지 않은 local/dev 환경에서는 고정 비밀번호로 즉시 초기화한다.
+- 비밀번호 초기화 시 기존 refresh token은 usedAt을 설정해 폐기한다.
+```
+
+### 비밀번호 재설정 확인
+
+```http
+POST /auth/password-reset/confirm
+```
+
+#### 요청
+
+```json
+{
+  "token": "password-reset-token",
+  "email": "student@kaist.ac.kr",
+  "newPassword": "new-password1234"
+}
+```
+
+#### 규칙
+
+```txt
+- SMTP env가 설정된 환경에서는 email 없이 token만으로 reset token을 검증한다.
+- SMTP env가 설정되지 않은 local/dev 환경의 고정 토큰은 email과 함께 검증한다.
+- 사용되었거나 만료된 reset token은 거부한다.
 ```
 
 ---
@@ -1788,4 +1873,3 @@ apps/frontend/app/manager/
 
 7. 추천 시스템은 단순한 점수식으로 시작한다.
    - `averageRating * log(verifiedReviewCount + 1)` 정도로 시작한다.
-

@@ -21,6 +21,11 @@ type RegisterResponse = {
   userId: string;
   email: string;
   isEmailVerified: boolean;
+  localVerification?: {
+    token: string;
+    email: string;
+    verificationLink: string;
+  };
 };
 
 const MOCK_VERIFY_TOKEN = "mock-email-token";
@@ -32,12 +37,14 @@ export function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [verificationLink, setVerificationLink] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSuccess(null);
+    setVerificationLink(null);
 
     if (!isKaistEmail(email)) {
       setError("Please use your @kaist.ac.kr email address.");
@@ -60,8 +67,14 @@ export function RegisterForm() {
         { anonymous: true },
       );
       setSuccess(
-        `Verification email sent to ${data.email}. Please verify before posting reviews.`,
+        data.localVerification?.verificationLink
+          ? `Verification is ready for ${data.email}.`
+          : `Verification email sent to ${data.email}. Please verify before posting reviews.`,
       );
+      if (data.localVerification?.verificationLink) {
+        setEmail(data.localVerification.email);
+        setVerificationLink(data.localVerification.verificationLink);
+      }
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message);
@@ -150,7 +163,14 @@ export function RegisterForm() {
               className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm text-primary"
             >
               {success}
-              {process.env.NEXT_PUBLIC_USE_MOCK === "true" ? (
+              {verificationLink ? (
+                <>
+                  {" "}
+                  <Link href={verificationLink} className="font-medium underline">
+                    Open verification link
+                  </Link>
+                </>
+              ) : process.env.NEXT_PUBLIC_USE_MOCK === "true" ? (
                 <>
                   {" "}
                   <Link

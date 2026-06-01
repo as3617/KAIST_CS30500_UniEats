@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { User, UserSchema } from "../users/schemas/user.schema";
+import { AuthEmailService } from "./auth-email.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthToken, AuthTokenSchema } from "./schemas/auth-token.schema";
@@ -13,7 +14,7 @@ import { AuthToken, AuthTokenSchema } from "./schemas/auth-token.schema";
     ]),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthEmailService, AuthService],
   exports: [AuthService, MongooseModule],
 })
 export class AuthModule {}
