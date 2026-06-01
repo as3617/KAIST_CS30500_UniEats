@@ -12,6 +12,8 @@ import { ok } from "../common/api-response";
 import {
   AuthService,
   LoginBody,
+  PasswordResetConfirmBody,
+  PasswordResetRequestBody,
   RefreshBody,
   RegisterBody,
   TokenBody,
@@ -28,8 +30,23 @@ export class AuthController {
   }
 
   @Get("verify-email")
-  async verifyEmail(@Query("token") token?: string) {
-    return ok(await this.authService.verifyEmail(token), "Email verified");
+  async verifyEmail(@Query("token") token?: string, @Query("email") email?: string) {
+    return ok(await this.authService.verifyEmail(token, email), "Email verified");
+  }
+
+  @Post("password-reset/request")
+  @HttpCode(HttpStatus.OK)
+  async requestPasswordReset(@Body() body: PasswordResetRequestBody) {
+    return ok(
+      await this.authService.requestPasswordReset(body),
+      "Password reset instructions processed",
+    );
+  }
+
+  @Post("password-reset/confirm")
+  @HttpCode(HttpStatus.OK)
+  async confirmPasswordReset(@Body() body: PasswordResetConfirmBody) {
+    return ok(await this.authService.confirmPasswordReset(body), "Password reset");
   }
 
   @Post("login")

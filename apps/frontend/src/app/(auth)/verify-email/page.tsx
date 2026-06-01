@@ -8,15 +8,26 @@ export const metadata: Metadata = {
 
 type VerifyEmailPageProps = {
   searchParams?: {
+    email?: string;
     token?: string;
   };
 };
 
 export default function VerifyEmailPage({ searchParams }: VerifyEmailPageProps) {
-  return <VerifyEmailView token={normalizeToken(searchParams?.token)} />;
+  return (
+    <VerifyEmailView
+      email={normalizeEmail(searchParams?.email)}
+      token={normalizeToken(searchParams?.token)}
+    />
+  );
 }
 
 function normalizeToken(value?: string) {
   if (!value || value.length > 512) return "";
+  return value;
+}
+
+function normalizeEmail(value?: string) {
+  if (!value || value.length > 254) return "";
   return value;
 }

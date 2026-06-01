@@ -18,9 +18,17 @@ import {
 import { Model, Types } from "mongoose";
 import { AuthTokenType, UserRole } from "../common/enums";
 import { User } from "../users/schemas/user.schema";
+import {
+  AuthEmailDeliveryMode,
+  AuthEmailDeliveryResult,
+  AuthEmailService,
+} from "./auth-email.service";
 import { AuthToken } from "./schemas/auth-token.schema";
 
 const EMAIL_PATTERN = /^[^@\s]+@kaist\.ac\.kr$/;
+const DEFAULT_LOCAL_VERIFY_TOKEN = "local-email-verify-token";
+const DEFAULT_LOCAL_PASSWORD_RESET_TOKEN = "local-password-reset-token";
+const DEFAULT_LOCAL_PASSWORD_RESET_PASSWORD = "UnieatsReset123!";
 const PASSWORD_HASH_PREFIX = "scrypt";
 const PASSWORD_KEY_LENGTH = 64;
 const PASSWORD_SCRYPT_OPTIONS: ScryptOptions = {
@@ -66,6 +74,16 @@ export interface TokenBody {
   refreshToken?: string;
 }
 
+export interface PasswordResetRequestBody {
+  email?: string;
+}
+
+export interface PasswordResetConfirmBody {
+  email?: string;
+  token?: string;
+  newPassword?: string;
+}
+
 export interface AuthenticatedUser {
   id: string;
   email: string;
@@ -85,6 +103,9 @@ export class AuthService {
   private readonly accessTokenSecret: string;
   private readonly accessTokenTtlSeconds: number;
   private readonly refreshTokenTtlDays: number;
+  private readonly localVerifyToken: string;
+  private readonly localPasswordResetToken: string;
+  private readonly localPasswordResetPassword: string;
 
   constructor(
     @InjectModel(User.name)
@@ -92,6 +113,7 @@ export class AuthService {
     @InjectModel(AuthToken.name)
     private readonly authTokenModel: Model<AuthToken>,
     private readonly configService: ConfigService,
+    private readonly authEmailService: AuthEmailService,
   ) {
     this.accessTokenSecret =
       this.configService.get<string>("ACCESS_TOKEN_SECRET")?.trim() ||
@@ -102,6 +124,15 @@ export class AuthService {
     this.refreshTokenTtlDays = Number(
       this.configService.get<string>("REFRESH_TOKEN_TTL_DAYS", "30"),
     );
+    this.localVerifyToken =
+      this.configService.get<string>("LOCAL_EMAIL_VERIFY_TOKEN")?.trim() ||
+      DEFAULT_LOCAL_VERIFY_TOKEN;
+    this.localPasswordResetToken =
+      this.configService.get<string>("LOCAL_PASSWORD_RESET_TOKEN")?.trim() ||
+      DEFAULT_LOCAL_PASSWORD_RESET_TOKEN;
+    this.localPasswordResetPassword =
+      this.configService.get<string>("LOCAL_PASSWORD_RESET_PASSWORD")?.trim() ||
+      DEFAULT_LOCAL_PASSWORD_RESET_PASSWORD;
   }
 
   async register(body?: RegisterBody) {
@@ -119,12 +150,22 @@ export class AuthService {
         role: UserRole.USER,
         isEmailVerified: false,
       });
-      await this.createStoredToken(user._id as Types.ObjectId, AuthTokenType.EMAIL_VERIFY, 24);
+      const issued = await this.issueEmailVerification(user._id as Types.ObjectId, user.email);
 
       return {
         userId: user._id.toString(),
         email: user.email,
         isEmailVerified: user.isEmailVerified,
+        emailDelivery: issued.delivery,
+        ...(issued.delivery.mode === AuthEmailDeliveryMode.LOCAL_FALLBACK
+          ? {
+              localVerification: {
+                token: issued.token,
+                email: user.email,
+                verificationLink: issued.link,
+              },
+            }
+          : {}),
       };
     } catch (error) {
       if (this.isDuplicateKeyError(error)) {
@@ -134,12 +175,16 @@ export class AuthService {
     }
   }
 
-  async verifyEmail(token?: string) {
+  async verifyEmail(token?: string, email?: string) {
     if (!token?.trim()) {
       throw new BadRequestException("token is required");
     }
 
-    const tokenHash = this.hashToken(token.trim());
+    const tokenHash = await this.resolveTokenHashForVerification(
+      token.trim(),
+      email,
+      AuthTokenType.EMAIL_VERIFY,
+    );
     const authToken = await this.authTokenModel
       .findOne({
         tokenHash,
@@ -161,6 +206,89 @@ export class AuthService {
     ]);
 
     return { isEmailVerified: true };
+  }
+
+  async requestPasswordReset(body?: PasswordResetRequestBody) {
+    const email = this.normalizeEmail(body?.email);
+    const user = await this.userModel.findOne({ email }).exec();
+    const usesLocalFallback = !this.authEmailService.isEmailServerConfigured();
+    let delivery: AuthEmailDeliveryResult = usesLocalFallback
+      ? { mode: AuthEmailDeliveryMode.LOCAL_FALLBACK, sent: false }
+      : { mode: AuthEmailDeliveryMode.EMAIL_SERVER_CONFIGURED, sent: false };
+    let resetLink: string | undefined;
+
+    if (user) {
+      const token = await this.createStoredToken(
+        user._id as Types.ObjectId,
+        AuthTokenType.PASSWORD_RESET,
+        1,
+        {
+          invalidateExisting: true,
+          token: usesLocalFallback ? this.localPasswordResetToken : undefined,
+          scopeToUser: usesLocalFallback,
+        },
+      );
+      resetLink = this.authEmailService.buildAuthLink(
+        "reset-password",
+        token,
+        usesLocalFallback ? user.email : undefined,
+      );
+
+      if (usesLocalFallback) {
+        await this.resetPasswordForUser(
+          user._id as Types.ObjectId,
+          this.localPasswordResetPassword,
+        );
+      } else {
+        delivery = await this.authEmailService.sendPasswordResetEmail(user.email, resetLink);
+      }
+    }
+
+    return {
+      resetRequested: true,
+      emailDelivery: delivery,
+      ...(usesLocalFallback
+        ? {
+            localPasswordReset: {
+              password: this.localPasswordResetPassword,
+              ...(resetLink ? { resetLink } : {}),
+            },
+          }
+        : {}),
+    };
+  }
+
+  async confirmPasswordReset(body?: PasswordResetConfirmBody) {
+    const token = this.normalizeToken(body?.token, "token");
+    const newPassword = this.normalizePassword(body?.newPassword, {
+      enforceStrength: true,
+    });
+    const tokenHash = await this.resolveTokenHashForVerification(
+      token,
+      body?.email,
+      AuthTokenType.PASSWORD_RESET,
+    );
+    const authToken = await this.authTokenModel
+      .findOne({
+        tokenHash,
+        type: AuthTokenType.PASSWORD_RESET,
+        usedAt: { $exists: false },
+        expiresAt: { $gt: new Date() },
+      })
+      .exec();
+
+    if (!authToken) {
+      throw new UnauthorizedException("invalid or expired token");
+    }
+
+    await Promise.all([
+      this.resetPasswordForUser(authToken.userId as Types.ObjectId, newPassword),
+      this.authTokenModel
+        .updateOne({ _id: authToken._id }, { usedAt: new Date() })
+        .exec(),
+    ]);
+
+    return { passwordReset: true };
   }
 
   async login(body?: LoginBody) {
@@ -296,10 +424,10 @@ export class AuthService {
     return value;
   }
 
-  private normalizeToken(token?: string): string {
+  private normalizeToken(token?: string, fieldName = "refreshToken"): string {
     const value = token?.trim();
     if (!value) {
-      throw new BadRequestException("refreshToken is required");
+      throw new BadRequestException(`${fieldName} is required`);
     }
     return value;
   }
@@ -343,19 +471,108 @@ export class AuthService {
     );
   }
 
+  private async issueEmailVerification(userId: Types.ObjectId, email: string) {
+    const usesLocalFallback = !this.authEmailService.isEmailServerConfigured();
+    const token = await this.createStoredToken(userId, AuthTokenType.EMAIL_VERIFY, 24, {
+      invalidateExisting: true,
+      token: usesLocalFallback ? this.localVerifyToken : undefined,
+      scopeToUser: usesLocalFallback,
+    });
+    const link = this.authEmailService.buildAuthLink(
+      "verify-email",
+      token,
+      usesLocalFallback ? email : undefined,
+    );
+    const delivery = await this.authEmailService.sendVerificationEmail(email, link);
+
+    return { token, link, delivery };
+  }
+
   private async createStoredToken(
     userId: Types.ObjectId,
     type: AuthTokenType,
     ttlHours: number,
+    options: {
+      token?: string;
+      scopeToUser?: boolean;
+      invalidateExisting?: boolean;
+    } = {},
   ): Promise<string> {
-    const token = randomBytes(32).toString("base64url");
-    await this.authTokenModel.create({
-      userId,
-      type,
-      tokenHash: this.hashToken(token),
-      expiresAt: new Date(Date.now() + ttlHours * 60 * 60 * 1000),
-    });
+    const token = options.token ?? randomBytes(32).toString("base64url");
+    const tokenHash = options.scopeToUser
+      ? this.hashScopedToken(token, userId, type)
+      : this.hashToken(token);
+    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+
+    if (options.invalidateExisting) {
+      await this.authTokenModel
+        .updateMany(
+          {
+            userId,
+            type,
+            tokenHash: { $ne: tokenHash },
+            usedAt: { $exists: false },
+          },
+          { usedAt: new Date() },
+        )
+        .exec();
+    }
+
+    await this.authTokenModel
+      .findOneAndUpdate(
+        { tokenHash },
+        {
+          $set: { userId, type, tokenHash, expiresAt },
+          $unset: { usedAt: "" },
+        },
+        { upsert: true, runValidators: true },
+      )
+      .exec();
     return token;
+  }
+
+  private async resolveTokenHashForVerification(
+    token: string,
+    email: string | undefined,
+    type: AuthTokenType.EMAIL_VERIFY | AuthTokenType.PASSWORD_RESET,
+  ) {
+    if (!this.authEmailService.isEmailServerConfigured() && this.isLocalFallbackToken(token, type)) {
+      const userEmail = this.normalizeEmail(email);
+      const user = await this.userModel.findOne({ email: userEmail }).select("_id").lean().exec();
+      if (!user?._id) {
+        throw new UnauthorizedException("invalid or expired token");
+      }
+      return this.hashScopedToken(token, user._id as Types.ObjectId, type);
+    }
+
+    return this.hashToken(token);
+  }
+
+  private isLocalFallbackToken(token: string, type: AuthTokenType) {
+    if (type === AuthTokenType.EMAIL_VERIFY) {
+      return token === this.localVerifyToken;
+    }
+    if (type === AuthTokenType.PASSWORD_RESET) {
+      return token === this.localPasswordResetToken;
+    }
+    return false;
+  }
+
+  private async resetPasswordForUser(userId: Types.ObjectId, password: string) {
+    const passwordHash = await this.hashPassword(password);
+    await Promise.all([
+      this.userModel.updateOne({ _id: userId }, { passwordHash }).exec(),
+      this.authTokenModel
+        .updateMany(
+          {
+            userId,
+            type: AuthTokenType.REFRESH_TOKEN,
+            usedAt: { $exists: false },
+          },
+          { usedAt: new Date() },
+        )
+        .exec(),
+    ]);
   }
 
   private createAccessToken(userId: string, role: UserRole): string {
@@ -413,6 +630,10 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  private hashScopedToken(token: string, userId: Types.ObjectId, type: AuthTokenType): string {
+    return this.hashToken(`${type}:${userId.toString()}:${token}`);
   }
 
   private toAuthUser(user: User & { _id: Types.ObjectId }): AuthenticatedUser {

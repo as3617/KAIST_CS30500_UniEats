@@ -16,6 +16,7 @@ import {
 import { ApiClientError, api } from "@/lib/api";
 
 type VerifyEmailViewProps = {
+  email?: string;
   token: string;
 };
 
@@ -24,7 +25,7 @@ type VerifyState =
   | { status: "success"; message: string }
   | { status: "error"; message: string };
 
-export function VerifyEmailView({ token }: VerifyEmailViewProps) {
+export function VerifyEmailView({ email, token }: VerifyEmailViewProps) {
   const [state, setState] = useState<VerifyState>(() =>
     token
       ? { status: "loading", message: "Verifying your KAIST email..." }
@@ -38,7 +39,7 @@ export function VerifyEmailView({ token }: VerifyEmailViewProps) {
     api
       .get<{ isEmailVerified: boolean }>("/auth/verify-email", {
         anonymous: true,
-        query: { token },
+        query: { email, token },
       })
       .then((data) => {
         if (!isCurrent) return;
@@ -68,7 +69,7 @@ export function VerifyEmailView({ token }: VerifyEmailViewProps) {
     return () => {
       isCurrent = false;
     };
-  }, [token]);
+  }, [email, token]);
 
   const isLoading = state.status === "loading";
   const isSuccess = state.status === "success";
