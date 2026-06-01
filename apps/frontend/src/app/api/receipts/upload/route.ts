@@ -1,8 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { proxyToBackend, shouldUseMockApi } from "../../_utils";
-import { mockMenuServings } from "@/mocks/data";
-import { receiptsStore } from "@/mocks/store";
+import { menuServingsStore, receiptsStore } from "@/mocks/store";
 import { createdJson, errorJson } from "@/mocks/respond";
 import type { Receipt } from "@/types";
 
@@ -25,7 +24,7 @@ export async function POST(request: NextRequest) {
       mealNames: ["Mackerel Set"],
       totalPrice: 4900,
     },
-    matchedMenuServings: mockMenuServings.map((s) => ({
+    matchedMenuServings: menuServingsStore.map((s) => ({
       id: s.id,
       mealName: s.meal.name,
       cafeteriaName: s.cafeteria.name,

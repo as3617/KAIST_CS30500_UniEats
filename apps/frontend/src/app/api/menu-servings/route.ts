@@ -1,10 +1,20 @@
 import type { NextRequest } from "next/server";
 
 import { proxyToBackend, shouldUseMockApi } from "../_utils";
-import { mockUser } from "@/mocks/data";
-import { menuServingsStore } from "@/mocks/store";
-import { okJson } from "@/mocks/respond";
-import type { AllergyCode, DietaryLabelCode, MenuServing } from "@/types";
+import { mockCafeterias, mockUser } from "@/mocks/data";
+import { mealsStore, menuServingsStore } from "@/mocks/store";
+import { createdJson, errorJson, okJson } from "@/mocks/respond";
+import {
+  MEAL_TIMES,
+  MENU_SERVING_STATUSES,
+} from "@/types";
+import type {
+  AllergyCode,
+  DietaryLabelCode,
+  MealTime,
+  MenuServing,
+  MenuServingStatus,
+} from "@/types";
 
 type Query = {
   date?: string | null;
@@ -106,4 +116,90 @@ export async function GET(request: NextRequest) {
     limit,
     total: items.length,
   });
+}
+
+export async function POST(request: NextRequest) {
+  if (!shouldUseMockApi()) return proxyToBackend(request);
+
+  const isAuthenticated = (request.headers.get("authorization") ?? "")
+    .toLowerCase()
+    .startsWith("bearer ");
+  if (!isAuthenticated) return errorJson(401, "UNAUTHORIZED", "sign in required");
+
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || typeof body !== "object") {
+    return errorJson(400, "VALIDATION_ERROR", "request body is required");
+  }
+
+  const meal = mealsStore.find((item) => item.id === body.mealId);
+  if (!meal) return errorJson(404, "NOT_FOUND", "meal not found");
+
+  const cafeteria = mockCafeterias.find((item) => item.id === body.cafeteriaId);
+  if (!cafeteria) return errorJson(404, "NOT_FOUND", "cafeteria not found");
+
+  const date = typeof body.date === "string" ? body.date.trim() : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return errorJson(400, "VALIDATION_ERROR", "date must use YYYY-MM-DD format");
+  }
+
+  const mealTime = body.mealTime;
+  if (typeof mealTime !== "string" || !MEAL_TIMES.includes(mealTime as MealTime)) {
+    return errorJson(400, "VALIDATION_ERROR", "valid mealTime is required");
+  }
+
+  const price = body.price;
+  if (typeof price !== "number" || !Number.isFinite(price) || price < 0) {
+    return errorJson(400, "VALIDATION_ERROR", "price must be a non-negative number");
+  }
+
+  const status = body.status ?? "AVAILABLE";
+  if (
+    typeof status !== "string" ||
+    !MENU_SERVING_STATUSES.includes(status as MenuServingStatus)
+  ) {
+    return errorJson(400, "VALIDATION_ERROR", "valid status is required");
+  }
+
+  const stock = body.stock;
+  if (
+    stock !== undefined &&
+    (typeof stock !== "number" || !Number.isInteger(stock) || stock < 0)
+  ) {
+    return errorJson(400, "VALIDATION_ERROR", "stock must be a non-negative integer");
+  }
+
+  const duplicate = menuServingsStore.find(
+    (serving) =>
+      serving.meal.id === meal.id &&
+      serving.cafeteria.id === cafeteria.id &&
+      serving.date === date &&
+      serving.mealTime === mealTime,
+  );
+  if (duplicate) {
+    return errorJson(409, "CONFLICT", "menu serving already exists");
+  }
+
+  const serving: MenuServing = {
+    id: `ms_custom_${Date.now()}`,
+    date,
+    mealTime: mealTime as MealTime,
+    price,
+    status: status as MenuServingStatus,
+    stock: typeof stock === "number" ? stock : undefined,
+    averageRating: 0,
+    verifiedReviewCount: 0,
+    cafeteria: { id: cafeteria.id, name: cafeteria.name },
+    meal: {
+      id: meal.id,
+      name: meal.name,
+      category: meal.category,
+      imageUrl: meal.imageUrl,
+      ingredients: [...meal.ingredients],
+      allergens: [...meal.allergens],
+      dietaryLabels: [...meal.dietaryLabels],
+    },
+  };
+
+  menuServingsStore.push(serving);
+  return createdJson(serving, "Menu serving created");
 }
