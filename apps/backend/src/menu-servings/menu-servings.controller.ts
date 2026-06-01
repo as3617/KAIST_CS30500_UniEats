@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query, Sse } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
 import { ok } from "../common/api-response";
 import { ViewHistoriesService } from "../view-histories/view-histories.service";
+import { MenuServingEventsService } from "./menu-serving-events.service";
 import {
   MenuServingCreateBody,
   MenuServingListQuery,
@@ -13,6 +14,7 @@ import {
 export class MenuServingsController {
   constructor(
     private readonly menuServingsService: MenuServingsService,
+    private readonly menuServingEventsService: MenuServingEventsService,
     private readonly authService: AuthService,
     private readonly viewHistoriesService: ViewHistoriesService,
   ) {}
@@ -23,6 +25,11 @@ export class MenuServingsController {
     @Headers("authorization") authorization?: string,
   ) {
     return ok(await this.menuServingsService.findAll(query, authorization));
+  }
+
+  @Sse("events")
+  streamStatusUpdates() {
+    return this.menuServingEventsService.stream();
   }
 
   @Post()

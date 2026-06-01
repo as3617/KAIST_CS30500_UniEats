@@ -25,6 +25,7 @@ import { toObjectId } from "../common/object-id";
 import { parsePagination } from "../common/pagination";
 import { Meal } from "../meals/schemas/meal.schema";
 import { User } from "../users/schemas/user.schema";
+import { MenuServingEventsService } from "./menu-serving-events.service";
 import { MenuServing } from "./schemas/menu-serving.schema";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -69,6 +70,7 @@ export class MenuServingsService {
     @InjectModel(CafeteriaManager.name)
     private readonly cafeteriaManagerModel: Model<CafeteriaManager>,
     private readonly authService: AuthService,
+    private readonly menuServingEventsService: MenuServingEventsService,
   ) {}
 
   async findAll(
@@ -204,7 +206,14 @@ export class MenuServingsService {
       throw new NotFoundException("menu serving not found");
     }
 
-    return this.toResponse(serving, null);
+    const response = this.toResponse(serving, null);
+    this.menuServingEventsService.publishStatusUpdate({
+      menuServingId: serving._id.toString(),
+      status: serving.status,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return response;
   }
 
   private async buildServingFilter(

@@ -9,6 +9,7 @@ import { Cafeteria, CafeteriaSchema } from "../cafeterias/schemas/cafeteria.sche
 import { Meal, MealSchema } from "../meals/schemas/meal.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { ViewHistoriesModule } from "../view-histories/view-histories.module";
+import { MenuServingEventsService } from "./menu-serving-events.service";
 import { MenuServingsController } from "./menu-servings.controller";
 import { MenuServingsService } from "./menu-servings.service";
 import { MenuServing, MenuServingSchema } from "./schemas/menu-serving.schema";
@@ -26,7 +27,7 @@ import { MenuServing, MenuServingSchema } from "./schemas/menu-serving.schema";
     ]),
   ],
   controllers: [MenuServingsController],
-  providers: [MenuServingsService],
+  providers: [MenuServingEventsService, MenuServingsService],
   exports: [MongooseModule],
 })
 export class MenuServingsModule {}

@@ -1336,6 +1336,31 @@ MANAGER, ADMIN
 ```txt
 - ADMIN은 모든 MenuServing 상태를 수정한다.
 - MANAGER는 해당 MenuServing의 cafeteriaId에서 cafeteria_managers 매핑이 isActive=true이고 STATUS_WRITE 권한이 있어야 한다.
+- 상태 변경 성공 시 서버는 실시간 상태 변경 이벤트를 발행한다.
+```
+
+---
+
+### 메뉴 판매 상태 실시간 구독
+
+```http
+GET /menu-servings/events
+Accept: text/event-stream
+```
+
+#### 이벤트
+
+```txt
+event: menu-serving-status-updated
+data: {"menuServingId":"665f...","status":"SOLD_OUT","updatedAt":"2026-04-08T03:10:00.000Z"}
+```
+
+#### 규칙
+
+```txt
+- 공개 메뉴 상태만 전송한다. 사용자, 매니저, 권한 정보는 이벤트 payload에 포함하지 않는다.
+- 프론트엔드는 이 이벤트를 수신하면 현재 화면에 표시 중인 MenuServing의 status를 즉시 갱신한다.
+- 연결 유지를 위해 heartbeat 이벤트를 주기적으로 보낼 수 있다.
 ```
 
 ---

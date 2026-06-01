@@ -27,6 +27,11 @@ import { ApiClientError, api } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
 import { formatPriceKRW, todayInSeoul } from "@/lib/date";
 import {
+  applyMenuServingStatusUpdate,
+  useMenuServingStatusEvents,
+} from "@/lib/menu-serving-events";
+import type { MenuServingStatusUpdate } from "@/lib/menu-serving-events";
+import {
   ALLERGY_CODES,
   ALLERGY_LABELS,
   CATEGORY_CODES,
@@ -249,6 +254,12 @@ export function ManagerView() {
   useEffect(() => {
     fetchManagerData();
   }, [fetchManagerData]);
+
+  const handleMenuServingStatusUpdate = useCallback((event: MenuServingStatusUpdate) => {
+    setServings((current) => applyMenuServingStatusUpdate(current, event));
+  }, []);
+
+  useMenuServingStatusEvents(handleMenuServingStatusUpdate);
 
   async function updateServingStatus(
     menuServingId: string,

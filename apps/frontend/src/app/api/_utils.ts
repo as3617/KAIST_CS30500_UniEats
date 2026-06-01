@@ -36,3 +36,28 @@ export async function proxyToBackend(request: NextRequest) {
     headers: responseHeaders,
   });
 }
+
+export async function proxyStreamToBackend(request: NextRequest) {
+  const backendPath = request.nextUrl.pathname.replace(/^\/api/, "");
+  const targetUrl = `${apiBaseUrl}/api${backendPath}${request.nextUrl.search}`;
+  const headers = new Headers(request.headers);
+
+  headers.delete("host");
+  headers.delete("content-length");
+
+  const response = await fetch(targetUrl, {
+    method: request.method,
+    headers,
+    cache: "no-store",
+  });
+  const responseHeaders = new Headers(response.headers);
+
+  responseHeaders.delete("content-encoding");
+  responseHeaders.delete("content-length");
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeaders,
+  });
+}

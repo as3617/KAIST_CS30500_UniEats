@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ArrowLeft, MapPin } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/card";
 import { ApiClientError, api } from "@/lib/api";
 import { formatPriceKRW } from "@/lib/date";
+import { useMenuServingStatusEvents } from "@/lib/menu-serving-events";
+import type { MenuServingStatusUpdate } from "@/lib/menu-serving-events";
 import {
   ALLERGY_LABELS,
   CATEGORY_LABELS,
@@ -61,6 +63,18 @@ export function MenuServingDetailView({
     };
   }, [menuServingId]);
 
+  const handleMenuServingStatusUpdate = useCallback(
+    (event: MenuServingStatusUpdate) => {
+      if (event.menuServingId !== menuServingId) return;
+      setServing((current) =>
+        current ? { ...current, status: event.status } : current,
+      );
+    },
+    [menuServingId],
+  );
+
+  useMenuServingStatusEvents(handleMenuServingStatusUpdate);
+
   if (isLoading) {
     return (
       <main className="container max-w-3xl py-8">
@@ -89,6 +103,8 @@ export function MenuServingDetailView({
   }
 
   const isSoldOut = serving.status === "SOLD_OUT";
+  const isHidden = serving.status === "HIDDEN";
+  const statusLabel = isSoldOut ? "Sold out" : isHidden ? "Hidden" : "Available";
   const hasAllergyConflict = serving.allergyWarning?.hasConflict ?? false;
   const location = [serving.cafeteria.location.building, serving.cafeteria.location.floor]
     .filter(Boolean)
@@ -120,8 +136,8 @@ export function MenuServingDetailView({
                 {serving.meal.description ?? "No description available."}
               </p>
             </div>
-            <Badge variant={isSoldOut ? "destructive" : "secondary"}>
-              {isSoldOut ? "Sold out" : "Available"}
+            <Badge variant={isSoldOut ? "destructive" : isHidden ? "outline" : "secondary"}>
+              {statusLabel}
             </Badge>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">

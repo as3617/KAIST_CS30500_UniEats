@@ -18,6 +18,11 @@ import { ApiClientError, api } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
 import { todayInSeoul } from "@/lib/date";
 import {
+  applyMenuServingStatusUpdate,
+  useMenuServingStatusEvents,
+} from "@/lib/menu-serving-events";
+import type { MenuServingStatusUpdate } from "@/lib/menu-serving-events";
+import {
   CATEGORY_CODES,
   CATEGORY_LABELS,
   DIETARY_LABEL_CODES,
@@ -114,6 +119,12 @@ export function SearchView() {
   useEffect(() => {
     fetchResults();
   }, [fetchResults]);
+
+  const handleMenuServingStatusUpdate = useCallback((event: MenuServingStatusUpdate) => {
+    setItems((current) => applyMenuServingStatusUpdate(current, event));
+  }, []);
+
+  useMenuServingStatusEvents(handleMenuServingStatusUpdate);
 
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
