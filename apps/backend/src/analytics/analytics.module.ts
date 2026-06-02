@@ -1,12 +1,12 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
-import { MenuServing, MenuServingSchema } from "../menu-servings/schemas/menu-serving.schema";
+import { Review, ReviewSchema } from "../reviews/schemas/review.schema";
 import { AnalyticsController } from "./analytics.controller";
 import { AnalyticsService } from "./analytics.service";
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: MenuServing.name, schema: MenuServingSchema }]),
+    MongooseModule.forFeature([{ name: Review.name, schema: ReviewSchema }]),
   ],
   controllers: [AnalyticsController],
   providers: [AnalyticsService],

@@ -82,5 +82,6 @@ ReviewSchema.index({ menuServingId: 1, createdAt: -1 });
 ReviewSchema.index({ mealId: 1, createdAt: -1 });
 ReviewSchema.index({ cafeteriaId: 1, createdAt: -1 });
 ReviewSchema.index({ userId: 1, createdAt: -1 });
+ReviewSchema.index({ isVerified: 1, createdAt: -1, rating: -1 });
 ReviewSchema.index({ receiptId: 1 }, { unique: true });
 ReviewSchema.index({ deletedAt: 1 });
