@@ -11,6 +11,7 @@ import { ReceiptsController } from "./receipts.controller";
 import { ReceiptsService } from "./receipts.service";
 import { Receipt, ReceiptSchema } from "./schemas/receipt.schema";
 import { OCR_CLIENT } from "./ocr-clients/ocr-client.interface";
+import { NaverClovaOcrClient } from "./ocr-clients/naver-clova-ocr.client";
 import { TesseractOcrClient } from "./ocr-clients/tesseract-ocr.client";
 
 @Module({
@@ -26,9 +27,17 @@ import { TesseractOcrClient } from "./ocr-clients/tesseract-ocr.client";
   controllers: [ReceiptsController],
   providers: [
     ReceiptsService,
+    TesseractOcrClient,
+    NaverClovaOcrClient,
     {
       provide: OCR_CLIENT,
-      useClass: TesseractOcrClient,
+      useFactory: (
+        tesseractClient: TesseractOcrClient,
+        clovaClient: NaverClovaOcrClient,
+      ) => {
+        return process.env.OCR_PROVIDER === "clova" ? clovaClient : tesseractClient;
+      },
+      inject: [TesseractOcrClient, NaverClovaOcrClient],
     },
   ],
   exports: [ReceiptsService, MongooseModule],

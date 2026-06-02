@@ -1,7 +1,12 @@
 FROM node:20-alpine
 
-# Install tesseract and Korean language data
-RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-kor
+# Install tesseract with Korean/English language data.
+RUN apk add --no-cache \
+    tesseract-ocr \
+    tesseract-ocr-data-chi_tra \
+    tesseract-ocr-data-eng \
+    tesseract-ocr-data-kor \
+    ttf-dejavu
 
 WORKDIR /app
 
@@ -13,8 +18,8 @@ RUN npm install --workspace apps/ocr
 COPY apps/ocr apps/ocr
 
 WORKDIR /app/apps/ocr
-RUN npx tsc || true
+RUN npm run build
 
 EXPOSE 5000
 
-CMD ["npx", "ts-node-dev", "src/main.ts"]
+CMD ["npm", "run", "start"]

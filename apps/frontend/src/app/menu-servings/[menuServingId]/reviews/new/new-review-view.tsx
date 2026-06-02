@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, CheckCircle, Upload } from "lucide-react";
+import { ArrowLeft, CheckCircle, Loader2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,9 +17,11 @@ import { authStorage } from "@/lib/auth-storage";
 import { formatPriceKRW } from "@/lib/date";
 import type { Receipt, Review } from "@/types";
 
-type Step = "upload" | "confirm" | "write" | "done";
+type Step = "upload" | "processing" | "confirm" | "write" | "done";
 
 const MAX_RECEIPT_IMAGE_BYTES = 5 * 1024 * 1024;
+const OCR_POLL_INTERVAL_MS = 2_000;
+const OCR_POLL_TIMEOUT_MS = 60_000;
 
 type NewReviewViewProps = {
   menuServingId: string;
@@ -30,6 +32,8 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
   const [step, setStep] = useState<Step>("upload");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPollingReceipt, setIsPollingReceipt] = useState(false);
+  const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Review form state
@@ -60,6 +64,61 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
       URL.revokeObjectURL(objectUrl);
     };
   }, [selectedFile]);
+
+  useEffect(() => {
+    if (step !== "processing" || !receipt || receipt.status !== "OCR_PROCESSING") {
+      return;
+    }
+
+    const startedAt = pollStartedAt ?? Date.now();
+    const receiptId = receipt.id;
+    const controller = new AbortController();
+    let timeoutId: number | undefined;
+    let cancelled = false;
+
+    setIsPollingReceipt(true);
+
+    async function pollReceipt() {
+      if (Date.now() - startedAt > OCR_POLL_TIMEOUT_MS) {
+        setIsPollingReceipt(false);
+        setError("OCR is taking longer than expected. You can check again or upload another receipt.");
+        return;
+      }
+
+      try {
+        const currentReceipt = await apiFetch<Receipt>(`/receipts/${receiptId}`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+
+        if (cancelled) return;
+
+        if (currentReceipt.status === "OCR_PROCESSING") {
+          timeoutId = window.setTimeout(pollReceipt, OCR_POLL_INTERVAL_MS);
+          return;
+        }
+
+        setReceipt(currentReceipt);
+        setPollStartedAt(null);
+        setIsPollingReceipt(false);
+        setStep("confirm");
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setIsPollingReceipt(false);
+        setError(err instanceof ApiClientError ? err.message : "Could not check OCR status.");
+      }
+    }
+
+    timeoutId = window.setTimeout(pollReceipt, OCR_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [pollStartedAt, receipt, step]);
 
   if (!isLoggedIn) {
     return (
@@ -107,6 +166,8 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
   function resetReceiptFlow() {
     setReceipt(null);
     setSelectedFile(null);
+    setIsPollingReceipt(false);
+    setPollStartedAt(null);
     setStep("upload");
     setError(null);
     if (fileInputRef.current) {
@@ -117,25 +178,23 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
   async function handleUpload() {
     if (!selectedFile) return;
     setIsSubmitting(true);
+    setPollStartedAt(null);
     setError(null);
     try {
       const formData = new FormData();
       formData.append("image", selectedFile);
-      let currentReceipt = await apiFetch<Receipt>("/receipts/upload", {
+      const currentReceipt = await apiFetch<Receipt>("/receipts/upload", {
         method: "POST",
         body: formData,
       });
-      
-      // Poll until the asynchronous OCR process finishes
-      while (currentReceipt.status === "OCR_PROCESSING") {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        currentReceipt = await apiFetch<Receipt>(`/receipts/${currentReceipt.id}`, {
-          method: "GET",
-        });
-      }
 
       setReceipt(currentReceipt);
-      setStep("confirm");
+      if (currentReceipt.status === "OCR_PROCESSING") {
+        setPollStartedAt(Date.now());
+        setStep("processing");
+      } else {
+        setStep("confirm");
+      }
       setSelectedFile(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -145,6 +204,13 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function handleRetryPolling() {
+    if (!receipt) return;
+    setError(null);
+    setPollStartedAt(Date.now());
+    setIsPollingReceipt(true);
   }
 
   async function handleConfirm(confirmedMenuServingId: string) {
@@ -260,6 +326,42 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
             <p className="text-center text-xs text-muted-foreground">
               JPG, PNG, or HEIC images up to 5MB are supported.
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {step === "processing" && receipt && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Processing receipt</CardTitle>
+            <CardDescription>
+              We are checking the receipt text and matching it to menu data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3 rounded-lg border px-4 py-5">
+              <Loader2 className={`h-5 w-5 ${isPollingReceipt ? "animate-spin" : ""}`} />
+              <div>
+                <p className="text-sm font-medium">
+                  {isPollingReceipt ? "OCR is running..." : "OCR status check paused"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Receipt ID: {receipt.id}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                onClick={handleRetryPolling}
+                disabled={isPollingReceipt}
+              >
+                Check again
+              </Button>
+              <Button type="button" variant="outline" onClick={resetReceiptFlow}>
+                Upload another receipt
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -422,6 +524,7 @@ export function NewReviewView({ menuServingId }: NewReviewViewProps) {
 function StepIndicator({ current }: { current: Step }) {
   const steps: { key: Step; label: string }[] = [
     { key: "upload", label: "Upload" },
+    { key: "processing", label: "OCR" },
     { key: "confirm", label: "Confirm" },
     { key: "write", label: "Review" },
     { key: "done", label: "Done" },

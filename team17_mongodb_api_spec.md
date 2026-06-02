@@ -1363,8 +1363,11 @@ multipart/form-data
 #### 폼 데이터
 
 ```txt
-file: receipt image
+image: receipt image
 ```
+
+업로드 성공 시 백엔드는 먼저 receipt document를 생성하고 `OCR_PROCESSING` 상태를 반환한다.
+프론트엔드는 `GET /receipts/:receiptId`를 주기적으로 호출해서 OCR 완료 여부를 확인한다.
 
 #### 응답
 
@@ -1372,23 +1375,10 @@ file: receipt image
 {
   "success": true,
   "data": {
-    "receiptId": "665f...",
-    "status": "NEED_CONFIRMATION",
-    "parsed": {
-      "purchasedAt": "2026-04-08T03:10:00.000Z",
-      "cafeteriaName": "Kaimaru",
-      "mealNames": ["Mackerel Set"],
-      "totalPrice": 4900
-    },
-    "matchedMenuServings": [
-      {
-        "id": "menuServingId",
-        "mealName": "Mackerel Set",
-        "cafeteriaName": "Kaimaru",
-        "date": "2026-04-08",
-        "price": 4900
-      }
-    ]
+    "id": "665f...",
+    "status": "OCR_PROCESSING",
+    "parsed": {},
+    "matchedMenuServings": []
   }
 }
 ```
@@ -1406,6 +1396,56 @@ GET /receipts/:receiptId
 ```txt
 USER
 ```
+
+#### 응답 상태
+
+```txt
+OCR_PROCESSING: OCR 처리 중이다. 프론트엔드는 일정 간격으로 다시 조회한다.
+NEED_CONFIRMATION: OCR 처리가 끝났고 사용자의 메뉴 확인이 필요하다.
+REJECTED: OCR 실패, 중복 영수증 등으로 검증할 수 없다.
+VERIFIED: 사용자가 매칭된 메뉴를 확인했다.
+USED: 리뷰 작성에 이미 사용된 영수증이다.
+```
+
+---
+
+### OCR webhook
+
+OCR provider가 처리 결과를 백엔드에 업로드하는 내부 API다.
+
+```http
+POST /receipts/webhook
+```
+
+#### 헤더
+
+```txt
+X-OCR-Webhook-Secret: configured OCR_WEBHOOK_SECRET
+```
+
+#### 요청
+
+```json
+{
+  "receiptId": "665f...",
+  "rawText": "..."
+}
+```
+
+실패 시에는 아래 형태로 전달한다.
+
+```json
+{
+  "receiptId": "665f...",
+  "error": "OCR processing failed"
+}
+```
+
+#### 규칙
+
+- 이 API는 사용자 클라이언트에서 직접 호출하지 않는다.
+- `OCR_WEBHOOK_SECRET`이 일치하지 않으면 처리하지 않는다.
+- `OCR_PROCESSING` 상태인 receipt만 webhook 결과로 갱신할 수 있다.
 
 ---
 

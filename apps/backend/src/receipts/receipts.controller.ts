@@ -19,6 +19,7 @@ import {
 } from "./receipts.service";
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const OCR_WEBHOOK_SECRET_HEADER = "x-ocr-webhook-secret";
 
 @Controller("receipts")
 export class ReceiptsController {
@@ -61,12 +62,12 @@ export class ReceiptsController {
 
   @Post("webhook")
   @HttpCode(HttpStatus.OK)
-  async webhook(@Body() body: any) {
+  async webhook(
+    @Headers(OCR_WEBHOOK_SECRET_HEADER) webhookSecret: string | undefined,
+    @Body() body: any,
+  ) {
     const { receiptId, rawText, error } = body;
-    if (!receiptId) {
-       return { success: false, error: 'receiptId is required' };
-    }
-    await this.receiptsService.handleWebhook(receiptId, rawText, error);
+    await this.receiptsService.handleWebhook(webhookSecret, receiptId, rawText, error);
     return ok({}, "Webhook processed successfully");
   }
 }

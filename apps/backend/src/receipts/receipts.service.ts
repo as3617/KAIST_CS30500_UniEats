@@ -3,12 +3,15 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
+import { timingSafeEqual } from "crypto";
 import { Model, Types } from "mongoose";
 import { AuthService } from "../auth/auth.service";
-import { MenuServingStatus, OcrProvider, ReceiptStatus } from "../common/enums";
+import { MenuServingStatus, ReceiptStatus } from "../common/enums";
 import { toObjectId } from "../common/object-id";
 import { MenuServing } from "../menu-servings/schemas/menu-serving.schema";
 import { Receipt } from "./schemas/receipt.schema";
@@ -16,6 +19,7 @@ import { OCR_CLIENT, OcrClient } from "./ocr-clients/ocr-client.interface";
 import { extractDate, matchMenu, extractApprovalNumber } from "./ocr-parser.util";
 
 const MAX_FAKE_OCR_MATCHES = 8;
+const MAX_REJECT_REASON_LENGTH = 500;
 
 export type ReceiptUploadFile = {
   originalname?: string;
@@ -49,32 +53,43 @@ export class ReceiptsService {
     const receipt = await this.receiptModel.create({
       userId: new Types.ObjectId(currentUser.id),
       imageUrl: this.buildPrivateImageKey(currentUser.id, file?.originalname),
-      ocrProvider: OcrProvider.TESSERACT,
+      ocrProvider: this.ocrClient.provider,
       status: ReceiptStatus.OCR_PROCESSING,
       usedForReview: false,
     } as any);
 
     if (file?.buffer) {
-      this.ocrClient.processReceiptAsync(receipt._id.toString(), file).catch(err => {
-        console.error('Failed to trigger OCR service', err);
+      void this.ocrClient.processReceiptAsync(receipt._id.toString(), file).catch(async (error) => {
+        console.error("Failed to trigger OCR service", error);
+        try {
+          await this.markOcrRejected(
+            receipt._id as Types.ObjectId,
+            "OCR service could not be started. Please try again later.",
+          );
+        } catch (updateError) {
+          console.error("Failed to mark receipt as rejected after OCR dispatch failure", updateError);
+        }
       });
     }
 
     return this.toReceiptResponse((receipt as any).toObject(), []);
   }
 
-  async handleWebhook(receiptId: string, rawText?: string, error?: string) {
-    const receiptObjectId = toObjectId(receiptId, "receiptId");
-    
+  async handleWebhook(
+    webhookSecret: string | undefined,
+    receiptId: unknown,
+    rawText?: unknown,
+    error?: unknown,
+  ) {
+    this.assertWebhookSecret(webhookSecret);
+    const receiptObjectId = toObjectId(this.requiredString(receiptId, "receiptId"), "receiptId");
+
     if (error) {
-       await this.receiptModel.updateOne(
-          { _id: receiptObjectId },
-          { $set: { status: ReceiptStatus.REJECTED, rejectReason: error } }
-       );
-       return;
+      await this.markOcrRejected(receiptObjectId, this.normalizeRejectReason(error));
+      return;
     }
 
-    const text = rawText || "";
+    const text = typeof rawText === "string" ? rawText : "";
     const extractedDate = extractDate(text);
     const approvalNumber = extractApprovalNumber(text);
 
@@ -86,9 +101,9 @@ export class ReceiptsService {
       });
 
       if (isDuplicate) {
-        await this.receiptModel.updateOne(
-          { _id: receiptObjectId },
-          { $set: { status: ReceiptStatus.REJECTED, rejectReason: "This receipt has already been used for a review." } }
+        await this.markOcrRejected(
+          receiptObjectId,
+          "This receipt has already been used for a review.",
         );
         return;
       }
@@ -117,8 +132,8 @@ export class ReceiptsService {
       }
     }
 
-    await this.receiptModel.updateOne(
-      { _id: receiptObjectId },
+    const result = await this.receiptModel.updateOne(
+      { _id: receiptObjectId, status: ReceiptStatus.OCR_PROCESSING },
       {
         $set: {
           ocrRawText: text,
@@ -126,11 +141,13 @@ export class ReceiptsService {
           matchedMenuServingIds,
           status: ReceiptStatus.NEED_CONFIRMATION,
         },
-      }
+      },
     );
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundException("processable receipt not found");
+    }
   }
-
-
 
   async findById(receiptId: string, authorization: string | undefined) {
     const currentUser = await this.authService.requireUser(authorization, {
@@ -211,6 +228,50 @@ export class ReceiptsService {
     if (!file.mimetype?.startsWith("image/")) {
       throw new BadRequestException("image file must use an image content type");
     }
+  }
+
+  private assertWebhookSecret(webhookSecret?: string) {
+    const expectedSecret = process.env.OCR_WEBHOOK_SECRET;
+    if (!expectedSecret) {
+      throw new InternalServerErrorException("OCR webhook secret is not configured");
+    }
+    if (!webhookSecret || !this.secureEquals(webhookSecret, expectedSecret)) {
+      throw new UnauthorizedException("invalid OCR webhook secret");
+    }
+  }
+
+  private secureEquals(left: string, right: string) {
+    const leftBuffer = Buffer.from(left);
+    const rightBuffer = Buffer.from(right);
+    if (leftBuffer.length !== rightBuffer.length) {
+      return false;
+    }
+    return timingSafeEqual(leftBuffer, rightBuffer);
+  }
+
+  private async markOcrRejected(receiptId: Types.ObjectId, reason: string) {
+    const result = await this.receiptModel
+      .updateOne(
+        { _id: receiptId, status: ReceiptStatus.OCR_PROCESSING },
+        {
+          $set: {
+            status: ReceiptStatus.REJECTED,
+            rejectReason: reason,
+          },
+        },
+      )
+      .exec();
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundException("processable receipt not found");
+    }
+  }
+
+  private normalizeRejectReason(value: unknown) {
+    if (typeof value !== "string" || !value.trim()) {
+      return "OCR processing failed";
+    }
+    return value.trim().slice(0, MAX_REJECT_REASON_LENGTH);
   }
 
   private async findFakeOcrMatches() {
