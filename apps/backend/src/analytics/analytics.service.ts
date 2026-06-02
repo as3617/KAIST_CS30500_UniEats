@@ -1,16 +1,24 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
+import { AuthService } from "../auth/auth.service";
 import { MenuServingStatus } from "../common/enums";
 import { parsePositiveInt } from "../common/pagination";
 import { Review } from "../reviews/schemas/review.schema";
+import { User } from "../users/schemas/user.schema";
 
 const DEFAULT_INSIGHT_LIMIT = 5;
 const MAX_INSIGHT_LIMIT = 20;
 const DEFAULT_WINDOW_DAYS = 7;
 const POSITIVE_RATING_THRESHOLD = 3;
 const REVIEW_WEIGHT_CAP = 50;
+const PERSONALIZED_CANDIDATE_LIMIT = 100;
+const PREFERRED_INGREDIENT_MATCH_CAP = 3;
+const DISLIKED_INGREDIENT_MATCH_CAP = 3;
+const PREFERRED_INGREDIENT_SCORE_BOOST = 0.15;
+const DISLIKED_INGREDIENT_SCORE_PENALTY = 0.25;
+const MIN_PERSONALIZED_SCORE_MULTIPLIER = 0.1;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ACTIVE_REVIEW_FILTER = {
   $or: [{ deletedAt: { $exists: false } }, { deletedAt: null }],
@@ -21,16 +29,28 @@ type DateRange = {
   toExclusive: Date;
 };
 
+type PersonalizationProfile = {
+  preferredIngredients: string[];
+  dislikedIngredients: string[];
+};
+
 @Injectable()
 export class AnalyticsService {
   constructor(
     @InjectModel(Review.name)
     private readonly reviewModel: Model<Review>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<User>,
+    private readonly authService: AuthService,
   ) {}
 
-  async weeklyBest(query: Record<string, unknown>) {
+  async weeklyBest(query: Record<string, unknown>, authorization?: string) {
     const limit = this.parseLimit(query.limit);
     const dateRange = this.parseDateRange(query);
+    const personalizationProfile = await this.resolvePersonalizationProfile(authorization);
+    const candidateLimit = personalizationProfile
+      ? Math.max(limit, Math.min(PERSONALIZED_CANDIDATE_LIMIT, limit * 4))
+      : limit;
 
     const result: any[] = await this.reviewModel.aggregate([
       { $match: this.buildReviewMatch(dateRange) },
@@ -91,18 +111,25 @@ export class AnalyticsService {
           _id: 1,
         },
       },
-      { $limit: limit },
+      { $limit: candidateLimit },
     ]);
 
-    return result.map((item) => ({
-      menuServingId: String(item._id),
-      mealName: item.meal?.name ?? "",
-      cafeteriaName: item.cafeteria?.name ?? "",
-      averageRating: this.roundRating(item.averageRating),
-      verifiedReviewCount: item.verifiedReviewCount,
-      positiveReviewCount: item.positiveReviewCount,
-      score: this.roundScore(item.score),
-    }));
+    return result
+      .map((item) => this.toWeeklyBestItem(item, personalizationProfile))
+      .sort((a, b) => {
+        if (b.sortScore !== a.sortScore) {
+          return b.sortScore - a.sortScore;
+        }
+        if (b.averageRating !== a.averageRating) {
+          return b.averageRating - a.averageRating;
+        }
+        if (b.cappedPositiveReviewCount !== a.cappedPositiveReviewCount) {
+          return b.cappedPositiveReviewCount - a.cappedPositiveReviewCount;
+        }
+        return a.menuServingId.localeCompare(b.menuServingId);
+      })
+      .slice(0, limit)
+      .map(({ sortScore, cappedPositiveReviewCount, ...item }) => item);
   }
 
   async cafeteriaRanking(query: Record<string, unknown>) {
@@ -183,6 +210,145 @@ export class AnalyticsService {
 
   private cappedPositiveReviewCountExpression() {
     return { $min: ["$positiveReviewCount", REVIEW_WEIGHT_CAP] };
+  }
+
+  private toWeeklyBestItem(item: any, profile: PersonalizationProfile | null) {
+    const baseScore = item.score ?? 0;
+    const sortScore = profile
+      ? this.applyPersonalizationScore(baseScore, item.meal?.ingredients, profile)
+      : baseScore;
+
+    return {
+      menuServingId: String(item._id),
+      mealName: item.meal?.name ?? "",
+      cafeteriaName: item.cafeteria?.name ?? "",
+      averageRating: this.roundRating(item.averageRating),
+      verifiedReviewCount: item.verifiedReviewCount,
+      positiveReviewCount: item.positiveReviewCount,
+      score: this.roundScore(sortScore),
+      sortScore,
+      cappedPositiveReviewCount: item.cappedPositiveReviewCount ?? 0,
+    };
+  }
+
+  private applyPersonalizationScore(
+    baseScore: number,
+    ingredients: unknown,
+    profile: PersonalizationProfile,
+  ) {
+    const normalizedIngredients = this.normalizeIngredientList(ingredients);
+    if (normalizedIngredients.length === 0) {
+      return baseScore;
+    }
+
+    const preferredMatches = this.countPreferenceMatches(
+      normalizedIngredients,
+      profile.preferredIngredients,
+    );
+    const dislikedMatches = this.countPreferenceMatches(
+      normalizedIngredients,
+      profile.dislikedIngredients,
+    );
+    const multiplier = Math.max(
+      MIN_PERSONALIZED_SCORE_MULTIPLIER,
+      1 +
+        Math.min(preferredMatches, PREFERRED_INGREDIENT_MATCH_CAP) *
+          PREFERRED_INGREDIENT_SCORE_BOOST -
+        Math.min(dislikedMatches, DISLIKED_INGREDIENT_MATCH_CAP) *
+          DISLIKED_INGREDIENT_SCORE_PENALTY,
+    );
+
+    return baseScore * multiplier;
+  }
+
+  private countPreferenceMatches(
+    normalizedIngredients: string[],
+    normalizedPreferences: string[],
+  ) {
+    if (normalizedPreferences.length === 0) {
+      return 0;
+    }
+
+    return normalizedPreferences.filter((preference) =>
+      normalizedIngredients.some((ingredient) =>
+        this.ingredientsMatchPreference(ingredient, preference),
+      ),
+    ).length;
+  }
+
+  private ingredientsMatchPreference(ingredient: string, preference: string) {
+    if (!ingredient || !preference) {
+      return false;
+    }
+
+    if (ingredient === preference) {
+      return true;
+    }
+
+    const escaped = this.escapeRegExp(preference);
+    return new RegExp(`(^|\\s)${escaped}(\\s|$)`).test(ingredient);
+  }
+
+  private async resolvePersonalizationProfile(
+    authorization?: string,
+  ): Promise<PersonalizationProfile | null> {
+    if (!authorization?.trim()) {
+      return null;
+    }
+
+    let currentUser: { id: string };
+    try {
+      currentUser = await this.authService.requireUser(authorization);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        return null;
+      }
+      throw error;
+    }
+
+    const user = await this.userModel
+      .findById(currentUser.id)
+      .select("dietaryProfile.preferredIngredients dietaryProfile.dislikedIngredients")
+      .lean()
+      .exec();
+    const dietaryProfile = (user?.dietaryProfile ?? {}) as Partial<PersonalizationProfile>;
+
+    return {
+      preferredIngredients: this.normalizeIngredientList(
+        dietaryProfile.preferredIngredients,
+      ),
+      dislikedIngredients: this.normalizeIngredientList(
+        dietaryProfile.dislikedIngredients,
+      ),
+    };
+  }
+
+  private normalizeIngredientList(value: unknown) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return [
+      ...new Set(
+        value
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => this.normalizeIngredientText(item))
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  private normalizeIngredientText(value: string) {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  private escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   private parseLimit(value: unknown) {
