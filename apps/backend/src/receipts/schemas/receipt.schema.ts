@@ -22,6 +22,9 @@ export class ParsedReceipt {
 
   @Prop({ type: Number, min: 0 })
   totalPrice?: number;
+
+  @Prop({ trim: true })
+  approvalNumber?: string;
 }
 
 export const ParsedReceiptSchema = SchemaFactory.createForClass(ParsedReceipt);

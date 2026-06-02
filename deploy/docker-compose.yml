@@ -45,10 +45,15 @@ services:
       LOCAL_EMAIL_VERIFY_TOKEN: ${LOCAL_EMAIL_VERIFY_TOKEN:-local-email-verify-token}
       LOCAL_PASSWORD_RESET_TOKEN: ${LOCAL_PASSWORD_RESET_TOKEN:-local-password-reset-token}
       LOCAL_PASSWORD_RESET_PASSWORD: ${LOCAL_PASSWORD_RESET_PASSWORD:-UnieatsReset123!}
+      OCR_PROVIDER: ${OCR_PROVIDER:-tesseract}
+      OCR_SERVICE_URL: ${OCR_SERVICE_URL:-http://ocr:5000/process}
+      OCR_WEBHOOK_URL: ${OCR_WEBHOOK_URL:-http://backend:4000/api/receipts/webhook}
+      OCR_WEBHOOK_SECRET: ${OCR_WEBHOOK_SECRET:-local-ocr-webhook-secret}
     expose:
       - "4000"
     depends_on:
       - mongo
+      - ocr
     networks:
       - unieats
 
@@ -96,6 +101,18 @@ services:
         done
     depends_on:
       - mongo
+    networks:
+      - unieats
+
+  ocr:
+    build:
+      context: ..
+      dockerfile: deploy/ocr/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 5000
+    expose:
+      - "5000"
     networks:
       - unieats
 

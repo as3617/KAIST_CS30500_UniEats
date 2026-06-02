@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "apps/frontend",
-    "apps/backend"
+    "apps/backend",
+    "apps/ocr"
   ],
   "scripts": {
     "dev:frontend": "npm --workspace apps/frontend run dev",
