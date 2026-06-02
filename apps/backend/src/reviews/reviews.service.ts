@@ -9,10 +9,12 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model, SortOrder, Types } from "mongoose";
 import { AuthenticatedUser, AuthService } from "../auth/auth.service";
 import { CafeteriaManager } from "../cafeteria-managers/schemas/cafeteria-manager.schema";
+import { Cafeteria } from "../cafeterias/schemas/cafeteria.schema";
 import { PaginatedData } from "../common/api-response";
 import {
   ManagerPermission,
   ManagerRole,
+  MenuServingStatus,
   ReceiptStatus,
   UserRole,
 } from "../common/enums";
@@ -61,6 +63,8 @@ export class ReviewsService {
     private readonly receiptModel: Model<Receipt>,
     @InjectModel(MenuServing.name)
     private readonly menuServingModel: Model<MenuServing>,
+    @InjectModel(Cafeteria.name)
+    private readonly cafeteriaModel: Model<Cafeteria>,
     @InjectModel(CafeteriaManager.name)
     private readonly cafeteriaManagerModel: Model<CafeteriaManager>,
     @InjectModel(User.name)
@@ -340,12 +344,22 @@ export class ReviewsService {
   private async requireMenuServing(menuServingId: string) {
     const menuServingObjectId = toObjectId(menuServingId, "menuServingId");
     const serving = await this.menuServingModel
-      .findById(menuServingObjectId)
-      .select("_id")
+      .findOne({ _id: menuServingObjectId, status: { $ne: MenuServingStatus.HIDDEN } })
+      .select("_id cafeteriaId")
       .lean()
       .exec();
 
     if (!serving) {
+      throw new NotFoundException("menu serving not found");
+    }
+
+    const cafeteria = await this.cafeteriaModel
+      .findOne({ _id: serving.cafeteriaId, isActive: true })
+      .select("_id")
+      .lean()
+      .exec();
+
+    if (!cafeteria) {
       throw new NotFoundException("menu serving not found");
     }
 
