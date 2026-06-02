@@ -132,6 +132,16 @@ export class ReceiptsService {
       }
     }
 
+    if (matchedMenuServingIds.length === 0) {
+      await this.markOcrRejectedWithResult(
+        receiptObjectId,
+        text,
+        parsed,
+        "OCR could not match this receipt to a menu serving.",
+      );
+      return;
+    }
+
     const result = await this.receiptModel.updateOne(
       { _id: receiptObjectId, status: ReceiptStatus.OCR_PROCESSING },
       {
@@ -255,6 +265,32 @@ export class ReceiptsService {
         { _id: receiptId, status: ReceiptStatus.OCR_PROCESSING },
         {
           $set: {
+            status: ReceiptStatus.REJECTED,
+            rejectReason: reason,
+          },
+        },
+      )
+      .exec();
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundException("processable receipt not found");
+    }
+  }
+
+  private async markOcrRejectedWithResult(
+    receiptId: Types.ObjectId,
+    ocrRawText: string,
+    parsed: Record<string, unknown>,
+    reason: string,
+  ) {
+    const result = await this.receiptModel
+      .updateOne(
+        { _id: receiptId, status: ReceiptStatus.OCR_PROCESSING },
+        {
+          $set: {
+            ocrRawText,
+            parsed,
+            matchedMenuServingIds: [],
             status: ReceiptStatus.REJECTED,
             rejectReason: reason,
           },
