@@ -86,10 +86,8 @@ async function main() {
     // materialized for the seed date from their standing menu board.
     await MenuServingModel.findOneAndUpdate(
       {
-        date: today,
-        cafeteriaId: cafeteria._id,
-        mealTime: menuItemSeed.mealTime,
-        mealId: meal._id,
+        source: MenuSource.FIXED_MENU,
+        sourceExternalKey: `kaist-seed:${menuItemSeed.key}`,
       },
       {
         $set: {

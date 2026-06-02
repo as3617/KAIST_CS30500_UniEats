@@ -22,6 +22,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       API_BASE_URL: http://backend:4000
+      KAKAO_MAP_APP_KEY: ${KAKAO_MAP_APP_KEY:-}
     expose:
       - "3000"
     networks:
