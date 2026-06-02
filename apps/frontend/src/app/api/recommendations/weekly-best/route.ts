@@ -51,8 +51,8 @@ export async function GET(request: NextRequest) {
         verifiedReviewCount > 0
           ? reviews.reduce((sum, review) => sum + review.rating, 0) / verifiedReviewCount
           : 0;
-      const baseScore =
-        averageRating * Math.log(Math.min(positiveReviewCount, REVIEW_WEIGHT_CAP) + 1);
+      const cappedPositiveReviewCount = Math.min(positiveReviewCount, REVIEW_WEIGHT_CAP);
+      const baseScore = averageRating * Math.log(cappedPositiveReviewCount + 1);
       const sortScore = personalizationProfile
         ? applyPersonalizationScore(
             baseScore,
@@ -70,19 +70,20 @@ export async function GET(request: NextRequest) {
         positiveReviewCount,
         score: Math.round(sortScore * 100) / 100,
         sortScore,
+        cappedPositiveReviewCount,
       };
     })
     .filter((item) => item.positiveReviewCount > 0)
     .sort((a, b) => {
       if (b.sortScore !== a.sortScore) return b.sortScore - a.sortScore;
       if (b.averageRating !== a.averageRating) return b.averageRating - a.averageRating;
-      if (b.positiveReviewCount !== a.positiveReviewCount) {
-        return b.positiveReviewCount - a.positiveReviewCount;
+      if (b.cappedPositiveReviewCount !== a.cappedPositiveReviewCount) {
+        return b.cappedPositiveReviewCount - a.cappedPositiveReviewCount;
       }
       return a.menuServingId.localeCompare(b.menuServingId);
     })
     .slice(0, limit)
-    .map(({ sortScore, ...item }) => item);
+    .map(({ sortScore, cappedPositiveReviewCount, ...item }) => item);
 
   return okJson(items);
 }

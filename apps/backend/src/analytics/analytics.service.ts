@@ -13,7 +13,6 @@ const MAX_INSIGHT_LIMIT = 20;
 const DEFAULT_WINDOW_DAYS = 7;
 const POSITIVE_RATING_THRESHOLD = 3;
 const REVIEW_WEIGHT_CAP = 50;
-const PERSONALIZED_CANDIDATE_LIMIT = 100;
 const PREFERRED_INGREDIENT_MATCH_CAP = 3;
 const DISLIKED_INGREDIENT_MATCH_CAP = 3;
 const PREFERRED_INGREDIENT_SCORE_BOOST = 0.15;
@@ -48,11 +47,9 @@ export class AnalyticsService {
     const limit = this.parseLimit(query.limit);
     const dateRange = this.parseDateRange(query);
     const personalizationProfile = await this.resolvePersonalizationProfile(authorization);
-    const candidateLimit = personalizationProfile
-      ? Math.max(limit, Math.min(PERSONALIZED_CANDIDATE_LIMIT, limit * 4))
-      : limit;
+    const shouldPersonalize = this.hasPersonalizationPreferences(personalizationProfile);
 
-    const result: any[] = await this.reviewModel.aggregate([
+    const pipeline: any[] = [
       { $match: this.buildReviewMatch(dateRange) },
       {
         $group: {
@@ -111,11 +108,18 @@ export class AnalyticsService {
           _id: 1,
         },
       },
-      { $limit: candidateLimit },
-    ]);
+    ];
+
+    if (!shouldPersonalize) {
+      pipeline.push({ $limit: limit });
+    }
+
+    const result: any[] = await this.reviewModel.aggregate(pipeline);
 
     return result
-      .map((item) => this.toWeeklyBestItem(item, personalizationProfile))
+      .map((item) =>
+        this.toWeeklyBestItem(item, shouldPersonalize ? personalizationProfile : null),
+      )
       .sort((a, b) => {
         if (b.sortScore !== a.sortScore) {
           return b.sortScore - a.sortScore;
@@ -210,6 +214,13 @@ export class AnalyticsService {
 
   private cappedPositiveReviewCountExpression() {
     return { $min: ["$positiveReviewCount", REVIEW_WEIGHT_CAP] };
+  }
+
+  private hasPersonalizationPreferences(profile: PersonalizationProfile | null) {
+    return Boolean(
+      profile &&
+        (profile.preferredIngredients.length > 0 || profile.dislikedIngredients.length > 0),
+    );
   }
 
   private toWeeklyBestItem(item: any, profile: PersonalizationProfile | null) {
