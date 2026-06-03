@@ -1,6 +1,11 @@
 import { Controller, Get, Param, Patch, Query, Headers } from "@nestjs/common";
 import { NotificationsService } from "./notifications.service";
 import { AuthService } from "../auth/auth.service";
+import { ok } from "../common/api-response";
+import { parsePositiveInt } from "../common/pagination";
+
+const DEFAULT_NOTIFICATION_LIMIT = 50;
+const MAX_NOTIFICATION_LIMIT = 100;
 
 @Controller("notifications")
 export class NotificationsController {
@@ -15,20 +20,23 @@ export class NotificationsController {
     @Query("limit") limitStr?: string,
   ) {
     const user = await this.authService.requireUser(authorization);
-    const limit = limitStr ? parseInt(limitStr, 10) : 50;
-    return this.notificationsService.findUserNotifications(user.id, limit);
+    const limit = Math.min(
+      parsePositiveInt(limitStr, DEFAULT_NOTIFICATION_LIMIT),
+      MAX_NOTIFICATION_LIMIT,
+    );
+    return ok(await this.notificationsService.findUserNotifications(user.id, limit));
   }
 
   @Get("unread-count")
   async getUnreadCount(@Headers("authorization") authorization: string) {
     const user = await this.authService.requireUser(authorization);
-    return this.notificationsService.getUnreadCount(user.id);
+    return ok(await this.notificationsService.getUnreadCount(user.id));
   }
 
   @Patch("read-all")
   async markAllAsRead(@Headers("authorization") authorization: string) {
     const user = await this.authService.requireUser(authorization);
-    return this.notificationsService.markAllAsRead(user.id);
+    return ok(await this.notificationsService.markAllAsRead(user.id));
   }
 
   @Patch(":notificationId/read")
@@ -37,6 +45,6 @@ export class NotificationsController {
     @Headers("authorization") authorization: string,
   ) {
     const user = await this.authService.requireUser(authorization);
-    return this.notificationsService.markAsRead(user.id, notificationId);
+    return ok(await this.notificationsService.markAsRead(user.id, notificationId));
   }
 }

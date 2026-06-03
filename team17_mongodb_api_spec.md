@@ -1950,23 +1950,27 @@ GET /notifications
 Headers:
   Authorization: Bearer <token>
 Query Parameters:
-  - limit: number (default: 50)
+  - limit: number (default: 50, max: 100)
 ```
 
 **Response (200 OK):**
 ```json
-[
-  {
-    "id": "60d5ec49f1b2c8b1f8e4e1a1",
-    "type": "MANAGER_REPLY",
-    "title": "리뷰에 답변이 등록되었습니다.",
-    "message": "카이마루 식당 매니저님이 회원님의 리뷰에 답변을 남겼습니다.",
-    "resourceType": "REVIEW",
-    "resourceId": "60d5ec49f1b2c8b1f8e4e1a2",
-    "readAt": null,
-    "createdAt": "2026-06-03T10:00:00Z"
-  }
-]
+{
+  "success": true,
+  "data": [
+    {
+      "id": "60d5ec49f1b2c8b1f8e4e1a1",
+      "type": "MANAGER_REPLY",
+      "title": "리뷰에 답변이 등록되었습니다.",
+      "message": "카이마루 식당 매니저님이 회원님의 리뷰에 답변을 남겼습니다.",
+      "resourceType": "REVIEW",
+      "resourceId": "60d5ec49f1b2c8b1f8e4e1a2",
+      "readAt": null,
+      "createdAt": "2026-06-03T10:00:00Z"
+    }
+  ],
+  "message": "OK"
+}
 ```
 
 ### 안읽은 알림 카운트 조회
@@ -1980,7 +1984,11 @@ Headers:
 **Response (200 OK):**
 ```json
 {
-  "unreadCount": 3
+  "success": true,
+  "data": {
+    "unreadCount": 3
+  },
+  "message": "OK"
 }
 ```
 
@@ -1995,14 +2003,18 @@ Headers:
 **Response (200 OK):**
 ```json
 {
-  "id": "60d5ec49f1b2c8b1f8e4e1a1",
-  "type": "MANAGER_REPLY",
-  "title": "리뷰에 답변이 등록되었습니다.",
-  "message": "카이마루 식당 매니저님이 회원님의 리뷰에 답변을 남겼습니다.",
-  "resourceType": "REVIEW",
-  "resourceId": "60d5ec49f1b2c8b1f8e4e1a2",
-  "readAt": "2026-06-03T10:05:00Z",
-  "createdAt": "2026-06-03T10:00:00Z"
+  "success": true,
+  "data": {
+    "id": "60d5ec49f1b2c8b1f8e4e1a1",
+    "type": "MANAGER_REPLY",
+    "title": "리뷰에 답변이 등록되었습니다.",
+    "message": "카이마루 식당 매니저님이 회원님의 리뷰에 답변을 남겼습니다.",
+    "resourceType": "REVIEW",
+    "resourceId": "60d5ec49f1b2c8b1f8e4e1a2",
+    "readAt": "2026-06-03T10:05:00Z",
+    "createdAt": "2026-06-03T10:00:00Z"
+  },
+  "message": "OK"
 }
 ```
 
@@ -2018,7 +2030,9 @@ Headers:
 ```json
 {
   "success": true,
-  "updatedCount": 3
+  "data": {
+    "updatedCount": 3
+  },
+  "message": "OK"
 }
 ```
-

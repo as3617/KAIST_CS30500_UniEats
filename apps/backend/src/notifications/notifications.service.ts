@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model, Types } from "mongoose";
+import { Model } from "mongoose";
+import { toObjectId } from "../common/object-id";
 import { Notification } from "./schemas/notification.schema";
 
 @Injectable()
@@ -11,8 +12,9 @@ export class NotificationsService {
   ) {}
 
   async findUserNotifications(userId: string, limit: number = 50) {
+    const userObjectId = toObjectId(userId, "userId");
     const notifications = await this.notificationModel
-      .find({ userId: new Types.ObjectId(userId) })
+      .find({ userId: userObjectId })
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean()
@@ -22,9 +24,10 @@ export class NotificationsService {
   }
 
   async getUnreadCount(userId: string) {
+    const userObjectId = toObjectId(userId, "userId");
     const count = await this.notificationModel
       .countDocuments({
-        userId: new Types.ObjectId(userId),
+        userId: userObjectId,
         readAt: { $exists: false },
       })
       .exec();
@@ -33,11 +36,13 @@ export class NotificationsService {
   }
 
   async markAsRead(userId: string, notificationId: string) {
+    const userObjectId = toObjectId(userId, "userId");
+    const notificationObjectId = toObjectId(notificationId, "notificationId");
     const updated = await this.notificationModel
       .findOneAndUpdate(
         {
-          _id: new Types.ObjectId(notificationId),
-          userId: new Types.ObjectId(userId),
+          _id: notificationObjectId,
+          userId: userObjectId,
         },
         {
           $set: { readAt: new Date() },
@@ -55,10 +60,11 @@ export class NotificationsService {
   }
 
   async markAllAsRead(userId: string) {
+    const userObjectId = toObjectId(userId, "userId");
     const result = await this.notificationModel
       .updateMany(
         {
-          userId: new Types.ObjectId(userId),
+          userId: userObjectId,
           readAt: { $exists: false },
         },
         {
@@ -67,7 +73,7 @@ export class NotificationsService {
       )
       .exec();
 
-    return { success: true, updatedCount: result.modifiedCount };
+    return { updatedCount: result.modifiedCount };
   }
 
   private toResponse(notification: any) {
@@ -78,7 +84,7 @@ export class NotificationsService {
       message: notification.message,
       resourceType: notification.resourceType,
       resourceId: notification.resourceId?.toString(),
-      readAt: notification.readAt,
+      readAt: notification.readAt ?? null,
       createdAt: notification.createdAt,
     };
   }
