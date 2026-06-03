@@ -3,22 +3,32 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, LogIn, MapPinned, Search, User } from "lucide-react";
+import { Bell, Home, LogIn, MapPinned, Search, User } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { authStorage } from "@/lib/auth-storage";
+import { useNotificationUnreadCount } from "@/lib/use-notification-unread-count";
 import type { User as AuthUser } from "@/types";
 
-const publicTabs = [
+type Tab = {
+  href: string;
+  icon: LucideIcon;
+  badge?: number;
+};
+
+const publicTabs: Tab[] = [
   { href: "/campus-map", icon: MapPinned },
   { href: "/dashboard", icon: Home },
   { href: "/search", icon: Search },
-] as const;
-const myPageTab = { href: "/my-page", icon: User } as const;
-const signInTab = { href: "/login", icon: LogIn } as const;
+];
+const notificationsTab: Tab = { href: "/notifications", icon: Bell };
+const myPageTab: Tab = { href: "/my-page", icon: User };
+const signInTab: Tab = { href: "/login", icon: LogIn };
 
 function getActiveTab(pathname: string): string {
   if (pathname.startsWith("/campus-map")) return "/campus-map";
   if (pathname.startsWith("/search")) return "/search";
+  if (pathname.startsWith("/notifications")) return "/notifications";
   if (pathname.startsWith("/my-page")) return "/my-page";
   if (pathname.startsWith("/login")) return "/login";
   return "/dashboard";
@@ -27,8 +37,12 @@ function getActiveTab(pathname: string): string {
 export function BottomTabBar() {
   const pathname = usePathname();
   const [user, setUser] = useState<Pick<AuthUser, "id"> | null>(null);
+  const unreadCount = useNotificationUnreadCount(user);
   const activeHref = getActiveTab(pathname);
-  const tabs = [...publicTabs, user ? myPageTab : signInTab];
+  const tabs: Tab[] = [
+    ...publicTabs,
+    ...(user ? [{ ...notificationsTab, badge: unreadCount }, myPageTab] : [signInTab]),
+  ];
 
   useEffect(() => {
     const syncUser = () => setUser(authStorage.getUser());
@@ -39,19 +53,24 @@ export function BottomTabBar() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-8">
-        {tabs.map(({ href, icon: Icon }) => {
+        {tabs.map(({ href, icon: Icon, badge = 0 }) => {
           const isActive = activeHref === href;
           return (
             <Link
               key={href}
               href={href}
-              className={`flex items-center justify-center w-12 h-12 rounded-xl transition-colors ${
+              className={`relative flex items-center justify-center w-12 h-12 rounded-xl transition-colors ${
                 isActive
                   ? "text-primary"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <Icon size={24} strokeWidth={isActive ? 2.5 : 1.8} />
+              {badge > 0 ? (
+                <span className="absolute right-1.5 top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-semibold text-destructive-foreground">
+                  {badge > 99 ? "99+" : badge}
+                </span>
+              ) : null}
             </Link>
           );
         })}

@@ -3,19 +3,37 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BriefcaseBusiness, Home, LogIn, MapPinned, Search, User } from "lucide-react";
+import {
+  Bell,
+  BriefcaseBusiness,
+  Home,
+  LogIn,
+  MapPinned,
+  Search,
+  User,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { authStorage } from "@/lib/auth-storage";
+import { useNotificationUnreadCount } from "@/lib/use-notification-unread-count";
 import type { User as AuthUser } from "@/types";
 
-const publicNavLinks = [
+type NavLink = {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  badge?: number;
+};
+
+const publicNavLinks: NavLink[] = [
   { href: "/dashboard", icon: Home, label: "Home" },
   { href: "/search", icon: Search, label: "Search" },
   { href: "/campus-map", icon: MapPinned, label: "Map" },
 ];
-const managerNavLink = { href: "/manager", icon: BriefcaseBusiness, label: "Manager" };
-const myPageNavLink = { href: "/my-page", icon: User, label: "My Page" };
-const signInNavLink = { href: "/login", icon: LogIn, label: "Sign in" };
+const managerNavLink: NavLink = { href: "/manager", icon: BriefcaseBusiness, label: "Manager" };
+const notificationsNavLink: NavLink = { href: "/notifications", icon: Bell, label: "Notifications" };
+const myPageNavLink: NavLink = { href: "/my-page", icon: User, label: "My Page" };
+const signInNavLink: NavLink = { href: "/login", icon: LogIn, label: "Sign in" };
 
 function canUseManager(user: Pick<AuthUser, "role"> | null) {
   return user?.role === "MANAGER" || user?.role === "ADMIN";
@@ -23,7 +41,8 @@ function canUseManager(user: Pick<AuthUser, "role"> | null) {
 
 export function TopHeader() {
   const pathname = usePathname();
-  const [user, setUser] = useState<Pick<AuthUser, "role"> | null>(null);
+  const [user, setUser] = useState<Pick<AuthUser, "id" | "role"> | null>(null);
+  const unreadCount = useNotificationUnreadCount(user);
 
   useEffect(() => {
     const syncUser = () => setUser(authStorage.getUser());
@@ -31,9 +50,10 @@ export function TopHeader() {
     return authStorage.subscribe(syncUser);
   }, []);
 
-  const navLinks = [
+  const navLinks: NavLink[] = [
     ...publicNavLinks,
     ...(canUseManager(user) ? [managerNavLink] : []),
+    ...(user ? [{ ...notificationsNavLink, badge: unreadCount }] : []),
     user ? myPageNavLink : signInNavLink,
   ];
 
@@ -46,14 +66,14 @@ export function TopHeader() {
         </Link>
 
         <nav className="flex items-center gap-1">
-          {navLinks.map(({ href, icon: Icon, label }) => {
+          {navLinks.map(({ href, icon: Icon, label, badge = 0 }) => {
             const isActive =
               pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -61,6 +81,11 @@ export function TopHeader() {
               >
                 <Icon size={16} />
                 {label}
+                {badge > 0 ? (
+                  <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-destructive-foreground">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                ) : null}
               </Link>
             );
           })}

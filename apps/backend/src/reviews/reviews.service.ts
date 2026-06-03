@@ -13,12 +13,15 @@ import { PaginatedData } from "../common/api-response";
 import {
   ManagerPermission,
   ManagerRole,
+  NotificationResourceType,
+  NotificationType,
   ReceiptStatus,
   UserRole,
 } from "../common/enums";
 import { toObjectId } from "../common/object-id";
 import { parsePagination } from "../common/pagination";
 import { MenuServing } from "../menu-servings/schemas/menu-serving.schema";
+import { NotificationsService } from "../notifications/notifications.service";
 import { Receipt } from "../receipts/schemas/receipt.schema";
 import { User } from "../users/schemas/user.schema";
 import { Review } from "./schemas/review.schema";
@@ -66,6 +69,7 @@ export class ReviewsService {
     @InjectModel(User.name)
     private readonly userModel: Model<User>,
     private readonly authService: AuthService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findByMenuServing(
@@ -311,6 +315,17 @@ export class ReviewsService {
 
     if (!updated) {
       throw new NotFoundException("review not found");
+    }
+
+    if (!hadReply) {
+      await this.notificationsService.createForUser({
+        userId: review.userId as Types.ObjectId,
+        type: NotificationType.MANAGER_REPLY,
+        title: "리뷰에 답변이 등록되었습니다.",
+        message: "작성하신 리뷰에 식당 매니저 답변이 등록되었습니다.",
+        resourceType: NotificationResourceType.REVIEW,
+        resourceId: reviewObjectId,
+      });
     }
 
     return this.toReviewResponse(updated);

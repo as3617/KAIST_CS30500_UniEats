@@ -7,6 +7,7 @@ import {
   MenuServing,
   MenuServingSchema,
 } from "../menu-servings/schemas/menu-serving.schema";
+import { NotificationsModule } from "../notifications/notifications.module";
 import { ReceiptsController } from "./receipts.controller";
 import { ReceiptsService } from "./receipts.service";
 import { Receipt, ReceiptSchema } from "./schemas/receipt.schema";
@@ -23,6 +24,7 @@ import { TesseractOcrClient } from "./ocr-clients/tesseract-ocr.client";
       { name: Cafeteria.name, schema: CafeteriaSchema },
     ]),
     AuthModule,
+    NotificationsModule,
   ],
   controllers: [ReceiptsController],
   providers: [

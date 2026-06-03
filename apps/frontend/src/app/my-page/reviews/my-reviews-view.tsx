@@ -16,7 +16,11 @@ import { ApiClientError, api } from "@/lib/api";
 import type { PaginatedData } from "@/types";
 import type { UserReview } from "@/app/api/users/me/reviews/route";
 
-export function MyReviewsView() {
+type MyReviewsViewProps = {
+  highlightedReviewId?: string;
+};
+
+export function MyReviewsView({ highlightedReviewId }: MyReviewsViewProps) {
   const [reviews, setReviews] = useState<UserReview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,8 +88,11 @@ export function MyReviewsView() {
           </p>
           <ul className="space-y-4">
             {reviews.map((review) => (
-              <li key={review.id}>
-                <MyReviewCard review={review} />
+              <li key={review.id} id={`review-${review.id}`}>
+                <MyReviewCard
+                  review={review}
+                  isHighlighted={review.id === highlightedReviewId}
+                />
               </li>
             ))}
           </ul>
@@ -95,10 +102,20 @@ export function MyReviewsView() {
   );
 }
 
-function MyReviewCard({ review }: { review: UserReview }) {
+function MyReviewCard({
+  review,
+  isHighlighted,
+}: {
+  review: UserReview;
+  isHighlighted: boolean;
+}) {
   return (
     <Link href={`/menu-servings/${review.menuServingId}`} className="block">
-      <Card className="transition-colors hover:border-primary/40">
+      <Card
+        className={`transition-colors hover:border-primary/40 ${
+          isHighlighted ? "border-primary bg-primary/5" : ""
+        }`}
+      >
         <CardHeader className="space-y-2 pb-3">
           <div className="flex items-start justify-between gap-2">
             <div>

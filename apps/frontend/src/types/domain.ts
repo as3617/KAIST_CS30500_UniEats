@@ -8,6 +8,8 @@ import type {
   DietaryLabelCode,
   MealTime,
   MenuServingStatus,
+  NotificationResourceType,
+  NotificationType,
   ReceiptStatus,
   UserRole,
 } from "./enums";
@@ -200,4 +202,19 @@ export type CafeteriaRankItem = {
   averageRating: number;
   verifiedReviewCount: number;
   rank: number;
+};
+
+export type Notification = {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  resourceType?: NotificationResourceType;
+  resourceId?: string;
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type NotificationUnreadCount = {
+  unreadCount: number;
 };

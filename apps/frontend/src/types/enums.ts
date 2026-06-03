@@ -67,6 +67,24 @@ export type ReceiptStatus =
   | "REJECTED"
   | "USED";
 
+export const NOTIFICATION_TYPES = [
+  "MANAGER_REPLY",
+  "RECEIPT_STATUS_UPDATED",
+  "REVIEW_AVAILABLE",
+  "MENU_STATUS_UPDATED",
+] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+export const NOTIFICATION_RESOURCE_TYPES = [
+  "REVIEW",
+  "RECEIPT",
+  "MENU_SERVING",
+  "CAFETERIA",
+  "MEAL",
+] as const;
+export type NotificationResourceType =
+  (typeof NOTIFICATION_RESOURCE_TYPES)[number];
+
 // Human-readable labels are kept here so UI code can stay enum-driven and
 // localized in one place later.
 export const ALLERGY_LABELS: Record<AllergyCode, string> = {

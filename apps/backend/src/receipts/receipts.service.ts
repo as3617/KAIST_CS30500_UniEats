@@ -11,9 +11,15 @@ import { InjectModel } from "@nestjs/mongoose";
 import { timingSafeEqual } from "crypto";
 import { Model, Types } from "mongoose";
 import { AuthService } from "../auth/auth.service";
-import { MenuServingStatus, ReceiptStatus } from "../common/enums";
+import {
+  MenuServingStatus,
+  NotificationResourceType,
+  NotificationType,
+  ReceiptStatus,
+} from "../common/enums";
 import { toObjectId } from "../common/object-id";
 import { MenuServing } from "../menu-servings/schemas/menu-serving.schema";
+import { NotificationsService } from "../notifications/notifications.service";
 import { Receipt } from "./schemas/receipt.schema";
 import { OCR_CLIENT, OcrClient } from "./ocr-clients/ocr-client.interface";
 import { extractDate, matchMenu, extractApprovalNumber } from "./ocr-parser.util";
@@ -42,6 +48,7 @@ export class ReceiptsService {
     private readonly menuServingModel: Model<MenuServing>,
     private readonly authService: AuthService,
     @Inject(OCR_CLIENT) private readonly ocrClient: OcrClient,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async upload(authorization: string | undefined, file?: ReceiptUploadFile) {
@@ -62,10 +69,11 @@ export class ReceiptsService {
       void this.ocrClient.processReceiptAsync(receipt._id.toString(), file).catch(async (error) => {
         console.error("Failed to trigger OCR service", error);
         try {
-          await this.markOcrRejected(
+          const rejected = await this.markOcrRejected(
             receipt._id as Types.ObjectId,
             "OCR service could not be started. Please try again later.",
           );
+          await this.notifyReceiptStatusUpdated(rejected);
         } catch (updateError) {
           console.error("Failed to mark receipt as rejected after OCR dispatch failure", updateError);
         }
@@ -85,7 +93,11 @@ export class ReceiptsService {
     const receiptObjectId = toObjectId(this.requiredString(receiptId, "receiptId"), "receiptId");
 
     if (error) {
-      await this.markOcrRejected(receiptObjectId, this.normalizeRejectReason(error));
+      const rejected = await this.markOcrRejected(
+        receiptObjectId,
+        this.normalizeRejectReason(error),
+      );
+      await this.notifyReceiptStatusUpdated(rejected);
       return;
     }
 
@@ -101,10 +113,11 @@ export class ReceiptsService {
       });
 
       if (isDuplicate) {
-        await this.markOcrRejected(
+        const rejected = await this.markOcrRejected(
           receiptObjectId,
           "This receipt has already been used for a review.",
         );
+        await this.notifyReceiptStatusUpdated(rejected);
         return;
       }
     }
@@ -132,21 +145,36 @@ export class ReceiptsService {
       }
     }
 
-    const result = await this.receiptModel.updateOne(
-      { _id: receiptObjectId, status: ReceiptStatus.OCR_PROCESSING },
-      {
-        $set: {
-          ocrRawText: text,
-          parsed,
-          matchedMenuServingIds,
-          status: ReceiptStatus.NEED_CONFIRMATION,
-        },
-      },
-    );
+    if (matchedMenuServingIds.length === 0) {
+      const rejected = await this.markOcrRejected(
+        receiptObjectId,
+        "OCR result could not be matched to a menu serving.",
+      );
+      await this.notifyReceiptStatusUpdated(rejected);
+      return;
+    }
 
-    if (result.matchedCount === 0) {
+    const updated = await this.receiptModel
+      .findOneAndUpdate(
+        { _id: receiptObjectId, status: ReceiptStatus.OCR_PROCESSING },
+        {
+          $set: {
+            ocrRawText: text,
+            parsed,
+            matchedMenuServingIds,
+            status: ReceiptStatus.NEED_CONFIRMATION,
+          },
+        },
+        { returnDocument: "after", runValidators: true },
+      )
+      .lean()
+      .exec();
+
+    if (!updated) {
       throw new NotFoundException("processable receipt not found");
     }
+
+    await this.notifyReceiptStatusUpdated(updated);
   }
 
   async findById(receiptId: string, authorization: string | undefined) {
@@ -218,6 +246,11 @@ export class ReceiptsService {
       throw new ForbiddenException("receipt cannot be confirmed");
     }
 
+    await Promise.all([
+      this.notifyReceiptStatusUpdated(updated),
+      this.notifyReviewAvailable(updated),
+    ]);
+
     return this.toReceiptResponse(updated, await this.findMatchedServings(updated));
   }
 
@@ -250,8 +283,8 @@ export class ReceiptsService {
   }
 
   private async markOcrRejected(receiptId: Types.ObjectId, reason: string) {
-    const result = await this.receiptModel
-      .updateOne(
+    const updated = await this.receiptModel
+      .findOneAndUpdate(
         { _id: receiptId, status: ReceiptStatus.OCR_PROCESSING },
         {
           $set: {
@@ -259,11 +292,63 @@ export class ReceiptsService {
             rejectReason: reason,
           },
         },
+        { returnDocument: "after", runValidators: true },
       )
+      .lean()
       .exec();
 
-    if (result.matchedCount === 0) {
+    if (!updated) {
       throw new NotFoundException("processable receipt not found");
+    }
+
+    return updated;
+  }
+
+  private async notifyReceiptStatusUpdated(receipt: any) {
+    await this.notificationsService.createForUser({
+      userId: receipt.userId as Types.ObjectId,
+      type: NotificationType.RECEIPT_STATUS_UPDATED,
+      title: this.receiptStatusTitle(receipt.status),
+      message: this.receiptStatusMessage(receipt.status),
+      resourceType: NotificationResourceType.RECEIPT,
+      resourceId: receipt._id as Types.ObjectId,
+    });
+  }
+
+  private async notifyReviewAvailable(receipt: any) {
+    await this.notificationsService.createForUser({
+      userId: receipt.userId as Types.ObjectId,
+      type: NotificationType.REVIEW_AVAILABLE,
+      title: "리뷰를 작성할 수 있습니다.",
+      message: "영수증이 확인되어 리뷰 작성이 가능해졌습니다.",
+      resourceType: NotificationResourceType.RECEIPT,
+      resourceId: receipt._id as Types.ObjectId,
+    });
+  }
+
+  private receiptStatusTitle(status: ReceiptStatus) {
+    switch (status) {
+      case ReceiptStatus.REJECTED:
+        return "영수증 OCR 처리가 실패했습니다.";
+      case ReceiptStatus.NEED_CONFIRMATION:
+        return "영수증 확인이 필요합니다.";
+      case ReceiptStatus.VERIFIED:
+        return "영수증이 확인되었습니다.";
+      default:
+        return "영수증 상태가 업데이트되었습니다.";
+    }
+  }
+
+  private receiptStatusMessage(status: ReceiptStatus) {
+    switch (status) {
+      case ReceiptStatus.REJECTED:
+        return "영수증을 확인할 수 없어 리뷰 작성이 제한되었습니다.";
+      case ReceiptStatus.NEED_CONFIRMATION:
+        return "OCR 처리가 완료되었습니다. 구매한 메뉴를 확인해 주세요.";
+      case ReceiptStatus.VERIFIED:
+        return "영수증 확인이 완료되었습니다.";
+      default:
+        return "영수증 처리 상태가 변경되었습니다.";
     }
   }
 

@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { proxyToBackend, shouldUseMockApi } from "../../_utils";
-import { menuServingsStore, receiptsStore } from "@/mocks/store";
+import { menuServingsStore, notificationsStore, receiptsStore } from "@/mocks/store";
 import { createdJson, errorJson } from "@/mocks/respond";
 import type { Receipt } from "@/types";
 
@@ -49,5 +49,15 @@ export async function POST(request: NextRequest) {
   };
 
   receiptsStore.push(receipt);
+  notificationsStore.unshift({
+    id: `noti_receipt_status_${Date.now()}`,
+    type: "RECEIPT_STATUS_UPDATED",
+    title: "영수증 확인이 필요합니다.",
+    message: "OCR 처리가 완료되었습니다. 구매한 메뉴를 확인해 주세요.",
+    resourceType: "RECEIPT",
+    resourceId: receipt.id,
+    readAt: null,
+    createdAt: new Date().toISOString(),
+  });
   return createdJson(receipt);
 }
