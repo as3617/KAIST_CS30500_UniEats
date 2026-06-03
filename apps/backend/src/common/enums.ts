@@ -103,6 +103,21 @@ export enum ManagerPermission {
   ANALYTICS_READ = "ANALYTICS_READ",
 }
 
+export enum NotificationType {
+  MANAGER_REPLY = "MANAGER_REPLY",
+  RECEIPT_STATUS_UPDATED = "RECEIPT_STATUS_UPDATED",
+  REVIEW_AVAILABLE = "REVIEW_AVAILABLE",
+  MENU_STATUS_UPDATED = "MENU_STATUS_UPDATED",
+}
+
+export enum NotificationResourceType {
+  REVIEW = "REVIEW",
+  RECEIPT = "RECEIPT",
+  MENU_SERVING = "MENU_SERVING",
+  CAFETERIA = "CAFETERIA",
+  MEAL = "MEAL",
+}
+
 export const ALLERGY_CODES = Object.values(AllergyCode);
 export const DIETARY_LABEL_CODES = Object.values(DietaryLabelCode);
 export const CATEGORY_CODES = Object.values(CategoryCode);
@@ -115,3 +130,5 @@ export const OCR_PROVIDERS = Object.values(OcrProvider);
 export const RECEIPT_STATUSES = Object.values(ReceiptStatus);
 export const MANAGER_ROLES = Object.values(ManagerRole);
 export const MANAGER_PERMISSIONS = Object.values(ManagerPermission);
+export const NOTIFICATION_TYPES = Object.values(NotificationType);
+export const NOTIFICATION_RESOURCE_TYPES = Object.values(NotificationResourceType);

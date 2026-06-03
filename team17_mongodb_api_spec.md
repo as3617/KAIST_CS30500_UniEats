@@ -1972,3 +1972,101 @@ apps/frontend/app/manager/
 
 7. 추천 시스템은 단순한 점수식으로 시작한다.
    - `averageRating * log(verifiedReviewCount + 1)` 정도로 시작한다.
+
+## 4. Notifications API
+
+알림 관련 API입니다.
+
+### 알림 목록 조회
+
+```http
+GET /notifications
+Headers:
+  Authorization: Bearer <token>
+Query Parameters:
+  - limit: number (default: 50, max: 100)
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "60d5ec49f1b2c8b1f8e4e1a1",
+      "type": "MANAGER_REPLY",
+      "title": "리뷰에 답변이 등록되었습니다.",
+      "message": "카이마루 식당 매니저님이 회원님의 리뷰에 답변을 남겼습니다.",
+      "resourceType": "REVIEW",
+      "resourceId": "60d5ec49f1b2c8b1f8e4e1a2",
+      "readAt": null,
+      "createdAt": "2026-06-03T10:00:00Z"
+    }
+  ],
+  "message": "OK"
+}
+```
+
+### 안읽은 알림 카운트 조회
+
+```http
+GET /notifications/unread-count
+Headers:
+  Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "unreadCount": 3
+  },
+  "message": "OK"
+}
+```
+
+### 개별 알림 읽음 처리
+
+```http
+PATCH /notifications/:notificationId/read
+Headers:
+  Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "60d5ec49f1b2c8b1f8e4e1a1",
+    "type": "MANAGER_REPLY",
+    "title": "리뷰에 답변이 등록되었습니다.",
+    "message": "카이마루 식당 매니저님이 회원님의 리뷰에 답변을 남겼습니다.",
+    "resourceType": "REVIEW",
+    "resourceId": "60d5ec49f1b2c8b1f8e4e1a2",
+    "readAt": "2026-06-03T10:05:00Z",
+    "createdAt": "2026-06-03T10:00:00Z"
+  },
+  "message": "OK"
+}
+```
+
+### 모든 알림 읽음 처리
+
+```http
+PATCH /notifications/read-all
+Headers:
+  Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "updatedCount": 3
+  },
+  "message": "OK"
+}
+```

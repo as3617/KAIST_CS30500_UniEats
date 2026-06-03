@@ -9,6 +9,7 @@ import { FavoritesModule } from "./favorites/favorites.module";
 import { HealthModule } from "./health/health.module";
 import { MealsModule } from "./meals/meals.module";
 import { MenuServingsModule } from "./menu-servings/menu-servings.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 import { ReceiptsModule } from "./receipts/receipts.module";
 import { ReviewsModule } from "./reviews/reviews.module";
 import { UsersModule } from "./users/users.module";
@@ -37,6 +38,7 @@ import { ViewHistoriesModule } from "./view-histories/view-histories.module";
     ViewHistoriesModule,
     CafeteriaManagersModule,
     AnalyticsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}
