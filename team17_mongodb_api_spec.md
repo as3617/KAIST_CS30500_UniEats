@@ -1007,8 +1007,6 @@ GET /cafeterias
 }
 ```
 
----
-
 ### 식당 상세 조회
 
 ```http
@@ -1652,6 +1650,17 @@ MANAGER, ADMIN
 GET /recommendations/weekly-best?from=2026-04-01&to=2026-04-08&limit=10
 ```
 
+#### 권한
+
+```txt
+PUBLIC
+```
+
+유효한 `Authorization: Bearer <accessToken>` 헤더가 있으면 해당 사용자의
+`dietaryProfile.preferredIngredients`, `dietaryProfile.dislikedIngredients`를 내부 점수
+보정에만 사용한다. 인증 헤더가 없거나 무효인 경우에는 공개 추천 점수만 사용한다.
+사용자의 선호/비선호 재료 목록이나 매칭 결과는 응답에 노출하지 않는다.
+
 #### 응답
 
 ```json
@@ -1664,6 +1673,7 @@ GET /recommendations/weekly-best?from=2026-04-01&to=2026-04-08&limit=10
       "cafeteriaName": "Kaimaru",
       "averageRating": 4.7,
       "verifiedReviewCount": 18,
+      "positiveReviewCount": 15,
       "score": 13.58
     }
   ]
@@ -1673,10 +1683,23 @@ GET /recommendations/weekly-best?from=2026-04-01&to=2026-04-08&limit=10
 #### 추천 점수 예시
 
 ```txt
-score = averageRating * log(verifiedReviewCount + 1)
+positiveReviewCount = rating >= 3인 검증 리뷰 수
+baseScore = averageRating * log(min(positiveReviewCount, 50) + 1)
+
+// 유효한 로그인 사용자가 있을 때만 적용
+personalizedMultiplier =
+  max(0.1, 1
+    + min(preferredIngredientMatchCount, 3) * 0.15
+    - min(dislikedIngredientMatchCount, 3) * 0.25)
+
+score = baseScore * personalizedMultiplier
 ```
 
-단순 평균만 쓰면 리뷰 1개짜리 5점 메뉴가 1등으로 올라가는 문제가 생긴다. 그래서 리뷰 수를 함께 반영한다.
+단순 평균만 쓰면 리뷰 1개짜리 5점 메뉴가 1등으로 올라가는 문제가 생긴다.
+그래서 긍정 리뷰 수를 함께 반영하되, 50개 이상부터는 리뷰 수 가중치가 더 커지지 않도록 상한을 둔다.
+로그인 사용자의 경우 선호 재료가 포함된 메뉴는 소폭 가산하고, 비선호 재료가 포함된 메뉴는 더 강하게 감점한다.
+비로그인 사용자의 `score`는 `baseScore`와 같다.
+`from`, `to`는 리뷰 작성일(`reviews.createdAt`) 기준으로 적용하며, 값이 없으면 Asia/Seoul 기준 최근 7일을 사용한다.
 
 ---
 
@@ -1703,10 +1726,21 @@ USER, MANAGER, ADMIN
       "cafeteriaName": "Kaimaru",
       "averageRating": 4.4,
       "verifiedReviewCount": 56,
+      "positiveReviewCount": 48,
       "rank": 1
     }
   ]
 }
+```
+
+#### 랭킹 규칙
+
+식당 랭킹도 같은 기간 필터와 긍정 리뷰 가중치를 사용한다.
+평균 별점은 해당 기간의 검증 리뷰 평균이며, 정렬 점수는 아래 기준으로 계산한다.
+
+```txt
+positiveReviewCount = rating >= 3인 검증 리뷰 수
+score = averageRating * log(min(positiveReviewCount, 50) + 1)
 ```
 
 ---

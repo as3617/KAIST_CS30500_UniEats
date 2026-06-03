@@ -146,8 +146,10 @@ export class ReceiptsService {
     }
 
     if (matchedMenuServingIds.length === 0) {
-      const rejected = await this.markOcrRejected(
+      const rejected = await this.markOcrRejectedWithResult(
         receiptObjectId,
+        text,
+        parsed,
         "OCR result could not be matched to a menu serving.",
       );
       await this.notifyReceiptStatusUpdated(rejected);
@@ -350,6 +352,36 @@ export class ReceiptsService {
       default:
         return "영수증 처리 상태가 변경되었습니다.";
     }
+  }
+
+  private async markOcrRejectedWithResult(
+    receiptId: Types.ObjectId,
+    ocrRawText: string,
+    parsed: Record<string, unknown>,
+    reason: string,
+  ) {
+    const updated = await this.receiptModel
+      .findOneAndUpdate(
+        { _id: receiptId, status: ReceiptStatus.OCR_PROCESSING },
+        {
+          $set: {
+            ocrRawText,
+            parsed,
+            matchedMenuServingIds: [],
+            status: ReceiptStatus.REJECTED,
+            rejectReason: reason,
+          },
+        },
+        { returnDocument: "after", runValidators: true },
+      )
+      .lean()
+      .exec();
+
+    if (!updated) {
+      throw new NotFoundException("processable receipt not found");
+    }
+
+    return updated;
   }
 
   private normalizeRejectReason(value: unknown) {

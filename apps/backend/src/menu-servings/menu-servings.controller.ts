@@ -7,6 +7,7 @@ import {
   MenuServingCreateBody,
   MenuServingListQuery,
   MenuServingStatusBody,
+  MenuServingWithMealCreateBody,
   MenuServingsService,
 } from "./menu-servings.service";
 
@@ -38,6 +39,17 @@ export class MenuServingsController {
     @Body() body: MenuServingCreateBody,
   ) {
     return ok(await this.menuServingsService.create(authorization, body), "Menu serving created");
+  }
+
+  @Post("with-meal")
+  async createWithMeal(
+    @Headers("authorization") authorization: string | undefined,
+    @Body() body: MenuServingWithMealCreateBody,
+  ) {
+    return ok(
+      await this.menuServingsService.createWithMeal(authorization, body),
+      "Menu serving created",
+    );
   }
 
   @Get(":menuServingId")

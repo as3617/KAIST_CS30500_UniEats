@@ -334,18 +334,16 @@ export function ManagerView() {
     setSuccess(null);
 
     try {
-      const meal = await api.post<Meal>("/meals", {
-        name: menuForm.name,
-        description: menuForm.description || undefined,
-        category: menuForm.category,
-        ingredients: parseCommaList(menuForm.ingredients),
-        allergens: menuForm.allergens,
-        dietaryLabels: menuForm.dietaryLabels,
-        nutrition: buildNutrition(menuForm),
-      });
-
-      const serving = await api.post<MenuServing>("/menu-servings", {
-        mealId: meal.id,
+      const serving = await api.post<MenuServing>("/menu-servings/with-meal", {
+        meal: {
+          name: menuForm.name,
+          description: menuForm.description || undefined,
+          category: menuForm.category,
+          ingredients: parseCommaList(menuForm.ingredients),
+          allergens: menuForm.allergens,
+          dietaryLabels: menuForm.dietaryLabels,
+          nutrition: buildNutrition(menuForm),
+        },
         cafeteriaId: selectedCafeteriaId,
         date: menuForm.date,
         mealTime: menuForm.mealTime,

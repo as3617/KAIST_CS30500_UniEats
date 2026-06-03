@@ -12,9 +12,14 @@ import { CafeteriaManager } from "../cafeteria-managers/schemas/cafeteria-manage
 import { Cafeteria } from "../cafeterias/schemas/cafeteria.schema";
 import { PaginatedData } from "../common/api-response";
 import {
+  ALLERGY_CODES,
   AllergyCode,
+  CATEGORY_CODES,
+  DIETARY_LABEL_CODES,
   MEAL_TIMES,
   MENU_SERVING_STATUSES,
+  CategoryCode,
+  DietaryLabelCode,
   ManagerPermission,
   ManagerRole,
   MealTime,
@@ -33,6 +38,7 @@ import { MenuServingEventsService } from "./menu-serving-events.service";
 import { MenuServing } from "./schemas/menu-serving.schema";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const NUTRITION_FIELDS = ["calories", "carbohydrate", "protein", "fat", "sodium"] as const;
 
 export interface MenuServingListQuery {
   date?: string;
@@ -48,6 +54,25 @@ export interface MenuServingListQuery {
 
 export interface MenuServingCreateBody {
   mealId?: unknown;
+  cafeteriaId?: unknown;
+  date?: unknown;
+  mealTime?: unknown;
+  price?: unknown;
+  status?: unknown;
+  stock?: unknown;
+}
+
+export interface MenuServingWithMealCreateBody {
+  meal?: {
+    name?: unknown;
+    description?: unknown;
+    category?: unknown;
+    imageUrl?: unknown;
+    ingredients?: unknown;
+    allergens?: unknown;
+    dietaryLabels?: unknown;
+    nutrition?: unknown;
+  };
   cafeteriaId?: unknown;
   date?: unknown;
   mealTime?: unknown;
@@ -167,6 +192,51 @@ export class MenuServingsService {
       });
       return this.toResponse(await this.findServingForManagerResponse(serving._id as Types.ObjectId), null);
     } catch (error) {
+      if (this.isDuplicateKeyError(error)) {
+        throw new ConflictException("menu serving already exists");
+      }
+      throw error;
+    }
+  }
+
+  async createWithMeal(
+    authorization: string | undefined,
+    body?: MenuServingWithMealCreateBody,
+  ) {
+    const currentUser = await this.authService.requireUser(authorization, {
+      requireEmailVerified: true,
+    });
+    const normalized = this.normalizeCreateWithMealBody(body);
+
+    await this.assertCanManageCafeteria(
+      currentUser,
+      normalized.serving.cafeteriaId,
+      ManagerPermission.MENU_WRITE,
+    );
+    await this.requireActiveCafeteria(normalized.serving.cafeteriaId);
+
+    const createdBy = new Types.ObjectId(currentUser.id);
+    let createdMeal: { _id?: Types.ObjectId } | null = null;
+
+    try {
+      createdMeal = await this.mealModel.create({
+        ...normalized.meal,
+        createdBy,
+      });
+      const serving = await this.menuServingModel.create({
+        ...normalized.serving,
+        mealId: createdMeal._id,
+        createdBy,
+      });
+
+      return this.toResponse(
+        await this.findServingForManagerResponse(serving._id as Types.ObjectId),
+        null,
+      );
+    } catch (error) {
+      if (createdMeal?._id) {
+        await this.mealModel.deleteOne({ _id: createdMeal._id }).exec().catch(() => undefined);
+      }
       if (this.isDuplicateKeyError(error)) {
         throw new ConflictException("menu serving already exists");
       }
@@ -420,12 +490,146 @@ export class MenuServingsService {
     };
   }
 
+  private normalizeCreateWithMealBody(body?: MenuServingWithMealCreateBody) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new BadRequestException("request body is required");
+    }
+    if (!body.meal || typeof body.meal !== "object" || Array.isArray(body.meal)) {
+      throw new BadRequestException("meal must be an object");
+    }
+
+    return {
+      meal: this.normalizeMealCreateBody(body.meal),
+      serving: {
+        cafeteriaId: toObjectId(
+          this.requiredString(body.cafeteriaId, "cafeteriaId"),
+          "cafeteriaId",
+        ),
+        date: this.normalizeDate(body.date),
+        mealTime: this.normalizeEnum(body.mealTime, "mealTime", MEAL_TIMES) as MealTime,
+        price: this.normalizeNonNegativeNumber(body.price, "price"),
+        status: this.normalizeOptionalEnum(
+          body.status,
+          "status",
+          MENU_SERVING_STATUSES,
+          MenuServingStatus.AVAILABLE,
+        ) as MenuServingStatus,
+        stock: this.normalizeOptionalNonNegativeInteger(body.stock, "stock"),
+      },
+    };
+  }
+
+  private normalizeMealCreateBody(meal: NonNullable<MenuServingWithMealCreateBody["meal"]>) {
+    return {
+      name: this.normalizeRequiredString(meal.name, "meal.name", 120),
+      description: this.normalizeOptionalString(meal.description, "meal.description", 1000),
+      category: this.normalizeEnum(meal.category, "meal.category", CATEGORY_CODES) as CategoryCode,
+      imageUrl: this.normalizeOptionalString(meal.imageUrl, "meal.imageUrl", 1000),
+      ingredients: this.normalizeStringArray(meal.ingredients, "meal.ingredients", false),
+      allergens: this.normalizeEnumArray(
+        meal.allergens,
+        "meal.allergens",
+        ALLERGY_CODES,
+      ) as AllergyCode[],
+      dietaryLabels: this.normalizeEnumArray(
+        meal.dietaryLabels,
+        "meal.dietaryLabels",
+        DIETARY_LABEL_CODES,
+      ) as DietaryLabelCode[],
+      nutrition: this.normalizeNutrition(meal.nutrition, false),
+    };
+  }
+
   private normalizeStatusBody(body?: MenuServingStatusBody): MenuServingStatus {
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       throw new BadRequestException("request body is required");
     }
 
     return this.normalizeEnum(body.status, "status", MENU_SERVING_STATUSES) as MenuServingStatus;
+  }
+
+  private normalizeRequiredString(value: unknown, fieldName: string, maxLength: number) {
+    const normalized = this.normalizeOptionalString(value, fieldName, maxLength);
+    if (!normalized) {
+      throw new BadRequestException(`${fieldName} is required`);
+    }
+    return normalized;
+  }
+
+  private normalizeOptionalString(value: unknown, fieldName: string, maxLength: number) {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+    if (typeof value !== "string") {
+      throw new BadRequestException(`${fieldName} must be a string`);
+    }
+
+    const normalized = value.trim();
+    if (normalized.length > maxLength) {
+      throw new BadRequestException(`${fieldName} must be at most ${maxLength} characters`);
+    }
+
+    return normalized || undefined;
+  }
+
+  private normalizeStringArray(value: unknown, fieldName: string, required: boolean) {
+    if (value === undefined && !required) {
+      return [];
+    }
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(`${fieldName} must be an array`);
+    }
+
+    const items: string[] = [];
+    for (const item of value) {
+      const normalized = this.normalizeRequiredString(item, fieldName, 120);
+      if (!items.includes(normalized)) {
+        items.push(normalized);
+      }
+    }
+    return items;
+  }
+
+  private normalizeEnumArray(value: unknown, fieldName: string, allowedValues: string[]) {
+    if (value === undefined) {
+      return [];
+    }
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(`${fieldName} must be an array`);
+    }
+
+    const values: string[] = [];
+    for (const item of value) {
+      const normalized = this.normalizeEnum(item, fieldName, allowedValues);
+      if (!values.includes(normalized)) {
+        values.push(normalized);
+      }
+    }
+    return values;
+  }
+
+  private normalizeNutrition(value: unknown, required: boolean) {
+    if (value === undefined && !required) {
+      return {};
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new BadRequestException("meal.nutrition must be an object");
+    }
+
+    const nutrition = value as Record<string, unknown>;
+    const normalized: Record<string, number> = {};
+    for (const field of NUTRITION_FIELDS) {
+      if (!(field in nutrition)) {
+        continue;
+      }
+      const numberValue = nutrition[field];
+      if (typeof numberValue !== "number" || !Number.isFinite(numberValue) || numberValue < 0) {
+        throw new BadRequestException(`meal.nutrition.${field} must be a non-negative number`);
+      }
+      normalized[field] = numberValue;
+    }
+
+    return normalized;
   }
 
   private requiredString(value: unknown, fieldName: string) {

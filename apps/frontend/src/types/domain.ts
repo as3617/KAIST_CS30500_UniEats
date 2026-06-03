@@ -193,6 +193,7 @@ export type WeeklyBestItem = {
   cafeteriaName: string;
   averageRating: number;
   verifiedReviewCount: number;
+  positiveReviewCount: number;
   score: number;
 };
 
@@ -201,6 +202,7 @@ export type CafeteriaRankItem = {
   cafeteriaName: string;
   averageRating: number;
   verifiedReviewCount: number;
+  positiveReviewCount: number;
   rank: number;
 };
 
