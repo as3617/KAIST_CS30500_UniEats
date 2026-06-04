@@ -6,10 +6,44 @@ upstream backend_upstream {
     server backend:4000;
 }
 
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    "" close;
+}
+
 server {
     listen 80;
-    server_name _;
+    server_name ${TLS_DOMAIN} _;
     client_max_body_size 10M;
+
+    location /nginx-health {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 301 https://${TLS_DOMAIN}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${TLS_DOMAIN} _;
+    client_max_body_size 10M;
+
+    ssl_certificate /etc/letsencrypt/live/${TLS_CERT_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${TLS_CERT_NAME}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
 
     location /nginx-health {
         access_log off;
@@ -37,6 +71,6 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection $connection_upgrade;
     }
 }
