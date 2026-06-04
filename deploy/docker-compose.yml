@@ -25,9 +25,9 @@ services:
       - unieats
 
   cert-init:
-    build:
-      context: ..
-      dockerfile: deploy/cert-init/Dockerfile
+    image: certbot/certbot:latest
+    entrypoint:
+      - sh
     restart: "no"
     environment:
       TLS_DOMAIN: ${TLS_DOMAIN:-unieats.ssrf.kr}
@@ -35,7 +35,6 @@ services:
     volumes:
       - letsencrypt:/etc/letsencrypt
     command:
-      - sh
       - -c
       - |
         set -eu

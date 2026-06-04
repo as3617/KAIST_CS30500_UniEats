@@ -214,8 +214,6 @@ For local HTTPS testing and production Let's Encrypt issuance, see
 │  ├─ nginx/
 │  │  └─ templates/
 │  │     └─ default.conf.template
-│  ├─ cert-init/
-│  │  └─ Dockerfile
 │  ├─ frontend/
 │  │  └─ Dockerfile
 │  └─ backend/
