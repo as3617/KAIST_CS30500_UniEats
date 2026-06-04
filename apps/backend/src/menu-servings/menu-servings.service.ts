@@ -39,6 +39,16 @@ import { MenuServing } from "./schemas/menu-serving.schema";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const NUTRITION_FIELDS = ["calories", "carbohydrate", "protein", "fat", "sodium"] as const;
+const PREFERRED_INGREDIENT_MATCH_CAP = 3;
+const DISLIKED_INGREDIENT_MATCH_CAP = 3;
+const PREFERRED_INGREDIENT_SORT_BOOST = 0.15;
+const DISLIKED_INGREDIENT_SORT_PENALTY = 0.25;
+
+type ViewerDietaryProfile = {
+  allergies: AllergyCode[];
+  preferredIngredients: string[];
+  dislikedIngredients: string[];
+};
 
 export interface MenuServingListQuery {
   date?: string;
@@ -109,13 +119,43 @@ export class MenuServingsService {
     query: MenuServingListQuery,
     authorization?: string,
   ): Promise<PaginatedData<Record<string, unknown>>> {
-    const viewerAllergies = await this.resolveViewerAllergies(authorization);
+    const viewerProfile = await this.resolveViewerDietaryProfile(authorization);
+    const viewerAllergies = viewerProfile?.allergies ?? null;
     const { page, limit, skip } = parsePagination(query as Record<string, unknown>);
     const filter = await this.buildServingFilter(query, viewerAllergies);
     const mealIdFilter = filter.mealId as { $in?: Types.ObjectId[] } | undefined;
 
     if (mealIdFilter?.$in?.length === 0) {
       return { items: [], page, limit, total: 0 };
+    }
+
+    if (this.hasIngredientPreferences(viewerProfile)) {
+      const [items, total] = await Promise.all([
+        this.menuServingModel
+          .find(filter)
+          .sort({ date: 1, mealTime: 1, cafeteriaId: 1 })
+          .populate({
+            path: "mealId",
+            select: "name description category imageUrl ingredients allergens dietaryLabels nutrition",
+          })
+          .populate({
+            path: "cafeteriaId",
+            select: "name description location openingHours",
+          })
+          .lean()
+          .exec(),
+        this.menuServingModel.countDocuments(filter).exec(),
+      ]);
+      const rankedItems = this.sortByIngredientPreferences(items, viewerProfile);
+
+      return {
+        items: rankedItems
+          .slice(skip, skip + limit)
+          .map((serving) => this.toResponse(serving, viewerAllergies)),
+        page,
+        limit,
+        total,
+      };
     }
 
     const [items, total] = await Promise.all([
@@ -146,7 +186,8 @@ export class MenuServingsService {
   }
 
   async findById(menuServingId: string, authorization?: string) {
-    const viewerAllergies = await this.resolveViewerAllergies(authorization);
+    const viewerProfile = await this.resolveViewerDietaryProfile(authorization);
+    const viewerAllergies = viewerProfile?.allergies ?? null;
     const _id = toObjectId(menuServingId, "menuServingId");
     const serving = await this.menuServingModel
       .findOne({ _id, status: { $ne: MenuServingStatus.HIDDEN } })
@@ -714,9 +755,9 @@ export class MenuServingsService {
     return response;
   }
 
-  private async resolveViewerAllergies(
+  private async resolveViewerDietaryProfile(
     authorization?: string,
-  ): Promise<AllergyCode[] | null> {
+  ): Promise<ViewerDietaryProfile | null> {
     if (!authorization?.trim()) {
       return null;
     }
@@ -724,11 +765,146 @@ export class MenuServingsService {
     const currentUser = await this.authService.requireUser(authorization);
     const user = await this.userModel
       .findById(currentUser.id)
-      .select("dietaryProfile.allergies")
+      .select(
+        "dietaryProfile.allergies dietaryProfile.preferredIngredients dietaryProfile.dislikedIngredients",
+      )
       .lean()
       .exec();
+    const dietaryProfile = (user?.dietaryProfile ?? {}) as Partial<ViewerDietaryProfile>;
 
-    return user?.dietaryProfile?.allergies ?? [];
+    return {
+      allergies: this.normalizeViewerAllergies(dietaryProfile.allergies),
+      preferredIngredients: this.normalizeIngredientList(
+        dietaryProfile.preferredIngredients,
+      ),
+      dislikedIngredients: this.normalizeIngredientList(
+        dietaryProfile.dislikedIngredients,
+      ),
+    };
+  }
+
+  private hasIngredientPreferences(
+    profile: ViewerDietaryProfile | null,
+  ): profile is ViewerDietaryProfile {
+    return Boolean(
+      profile &&
+        (profile.preferredIngredients.length > 0 || profile.dislikedIngredients.length > 0),
+    );
+  }
+
+  private sortByIngredientPreferences(
+    servings: any[],
+    profile: ViewerDietaryProfile,
+  ) {
+    return servings
+      .map((serving, index) => ({
+        serving,
+        index,
+        score: this.ingredientPreferenceSortScore(serving.mealId, profile),
+      }))
+      .sort((a, b) => {
+        if (b.score !== a.score) {
+          return b.score - a.score;
+        }
+        return a.index - b.index;
+      })
+      .map(({ serving }) => serving);
+  }
+
+  private ingredientPreferenceSortScore(meal: any, profile: ViewerDietaryProfile) {
+    const ingredients = this.normalizeIngredientList(meal?.ingredients);
+    if (ingredients.length === 0) {
+      return 0;
+    }
+
+    const preferredMatches = this.countPreferenceMatches(
+      ingredients,
+      profile.preferredIngredients,
+    );
+    const dislikedMatches = this.countPreferenceMatches(
+      ingredients,
+      profile.dislikedIngredients,
+    );
+
+    return (
+      Math.min(preferredMatches, PREFERRED_INGREDIENT_MATCH_CAP) *
+        PREFERRED_INGREDIENT_SORT_BOOST -
+      Math.min(dislikedMatches, DISLIKED_INGREDIENT_MATCH_CAP) *
+        DISLIKED_INGREDIENT_SORT_PENALTY
+    );
+  }
+
+  private countPreferenceMatches(
+    normalizedIngredients: string[],
+    normalizedPreferences: string[],
+  ) {
+    if (normalizedPreferences.length === 0) {
+      return 0;
+    }
+
+    return normalizedPreferences.filter((preference) =>
+      normalizedIngredients.some((ingredient) =>
+        this.ingredientsMatchPreference(ingredient, preference),
+      ),
+    ).length;
+  }
+
+  private ingredientsMatchPreference(ingredient: string, preference: string) {
+    if (!ingredient || !preference) {
+      return false;
+    }
+    if (ingredient === preference) {
+      return true;
+    }
+    if (ingredient.includes(preference) || preference.includes(ingredient)) {
+      return true;
+    }
+
+    const escaped = this.escapeRegExp(preference);
+    return new RegExp(`(^|\\s)${escaped}(\\s|$)`).test(ingredient);
+  }
+
+  private normalizeViewerAllergies(value: unknown) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return [
+      ...new Set(
+        value.filter(
+          (item): item is AllergyCode =>
+            typeof item === "string" && ALLERGY_CODES.includes(item as AllergyCode),
+        ),
+      ),
+    ];
+  }
+
+  private normalizeIngredientList(value: unknown) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return [
+      ...new Set(
+        value
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => this.normalizeIngredientText(item))
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  private normalizeIngredientText(value: string) {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  private escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   private buildAllergyWarning(meal: any, viewerAllergies: AllergyCode[]) {
