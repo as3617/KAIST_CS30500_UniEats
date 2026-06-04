@@ -154,16 +154,32 @@ Start the full stack with nginx, frontend, backend, and MongoDB:
 npm run docker:up
 ```
 
-By default, nginx listens on `http://localhost`.
+For deployment-style startup, generate `deploy/.env` and start the stack with:
+
+```bash
+sh deploy.sh APP_PUBLIC_URL=https://unieats.ssrf.kr KAKAO_MAP_APP_KEY=your-kakao-key
+```
+
+The deploy script accepts optional `OCR_PROVIDER`, `SMTP_HOST`, `SMTP_FROM`,
+`KAKAO_MAP_APP_KEY`, and `APP_PUBLIC_URL` values. `APP_PUBLIC_URL` is also used
+as `CORS_ORIGIN`, and its host is used as `TLS_DOMAIN`. The script generates a
+fresh `OCR_WEBHOOK_SECRET` each time it runs.
+
+By default, nginx listens on `http://localhost` and `https://localhost`.
+Set `TLS_DOMAIN=unieats.ssrf.kr` and map that domain to the deployment host to
+use the configured HTTPS virtual host.
 
 Request flow:
 
 ```text
 Browser
-  └─ http://localhost
+  └─ http://localhost or https://unieats.ssrf.kr
       ├─ /api/*  -> nginx -> NestJS backend
       └─ /*      -> nginx -> Next.js frontend
 ```
+
+For local HTTPS testing and production Let's Encrypt issuance, see
+`docs/https-letsencrypt.md`.
 
 ## Stacks
  - Next.js
@@ -196,7 +212,10 @@ Browser
 │  ├─ .env.example
 │  ├─ docker-compose.yml
 │  ├─ nginx/
-│  │  └─ nginx.conf
+│  │  └─ templates/
+│  │     └─ default.conf.template
+│  ├─ cert-init/
+│  │  └─ Dockerfile
 │  ├─ frontend/
 │  │  └─ Dockerfile
 │  └─ backend/
