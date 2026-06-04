@@ -18,6 +18,10 @@ Optional values:
 sh deploy.sh \
   OCR_PROVIDER=tesseract \
   SMTP_HOST=smtp.example.com \
+  SMTP_PORT=587 \
+  SMTP_SECURE=false \
+  SMTP_USER=smtp-user \
+  SMTP_PASS=smtp-password \
   SMTP_FROM=no-reply@unieats.ssrf.kr \
   KAKAO_MAP_APP_KEY=your-kakao-key \
   LETSENCRYPT_EMAIL=admin@example.com \
@@ -27,6 +31,19 @@ sh deploy.sh \
 `APP_PUBLIC_URL` is normalized to an origin and written to both `APP_PUBLIC_URL`
 and `CORS_ORIGIN`. Its host is written to `TLS_DOMAIN`. `OCR_WEBHOOK_SECRET` is
 randomized every time the script runs.
+
+For Gmail SMTP, use a Google app password without spaces:
+
+```bash
+sh deploy.sh \
+  SMTP_HOST=smtp.gmail.com \
+  SMTP_PORT=587 \
+  SMTP_SECURE=false \
+  SMTP_USER=your.gmail@gmail.com \
+  SMTP_PASS=your16characterapppassword \
+  SMTP_FROM=your.gmail@gmail.com \
+  APP_PUBLIC_URL=https://unieats.ssrf.kr
+```
 
 To request and install a Let's Encrypt certificate in the same deploy run:
 

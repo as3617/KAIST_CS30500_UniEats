@@ -160,8 +160,9 @@ For deployment-style startup, generate `deploy/.env` and start the stack with:
 sh deploy.sh APP_PUBLIC_URL=https://unieats.ssrf.kr KAKAO_MAP_APP_KEY=your-kakao-key
 ```
 
-The deploy script accepts optional `OCR_PROVIDER`, `SMTP_HOST`, `SMTP_FROM`,
-`KAKAO_MAP_APP_KEY`, `APP_PUBLIC_URL`, and `LETSENCRYPT_EMAIL` values.
+The deploy script accepts optional `OCR_PROVIDER`, `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `KAKAO_MAP_APP_KEY`,
+`APP_PUBLIC_URL`, and `LETSENCRYPT_EMAIL` values.
 `APP_PUBLIC_URL` is also used as `CORS_ORIGIN`, and its host is used as
 `TLS_DOMAIN`. The script generates a fresh `OCR_WEBHOOK_SECRET` each time it
 runs. Add `--issue-cert` with `LETSENCRYPT_EMAIL` on a public server to request

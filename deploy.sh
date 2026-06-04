@@ -14,6 +14,10 @@ Usage:
 Options:
   --ocr-provider VALUE          OCR provider name, e.g. tesseract or clova
   --smtp-host VALUE             SMTP host used by the backend mailer
+  --smtp-port VALUE             SMTP port. Defaults to 587
+  --smtp-secure VALUE           Use implicit TLS for SMTP, true or false
+  --smtp-user VALUE             SMTP username
+  --smtp-pass VALUE             SMTP password or app password
   --smtp-from VALUE             Sender email address used by the backend mailer
   --kakao-map-app-key VALUE     Kakao JavaScript map app key for the frontend
   --app-public-url VALUE        Public app origin. Also sets CORS_ORIGIN and TLS_DOMAIN
@@ -41,6 +45,10 @@ ISSUE_CERT=0
 LETSENCRYPT_STAGING=0
 OCR_PROVIDER_ARG=""
 SMTP_HOST_ARG=""
+SMTP_PORT_ARG=""
+SMTP_SECURE_ARG=""
+SMTP_USER_ARG=""
+SMTP_PASS_ARG=""
 SMTP_FROM_ARG=""
 KAKAO_MAP_APP_KEY_ARG=""
 APP_PUBLIC_URL_ARG=""
@@ -69,6 +77,50 @@ while [ "$#" -gt 0 ]; do
       ;;
     SMTP_HOST=*)
       SMTP_HOST_ARG=${1#*=}
+      ;;
+    --smtp-port=*)
+      SMTP_PORT_ARG=${1#*=}
+      ;;
+    --smtp-port)
+      [ "$#" -ge 2 ] || die "Missing value for --smtp-port"
+      shift
+      SMTP_PORT_ARG=$1
+      ;;
+    SMTP_PORT=*)
+      SMTP_PORT_ARG=${1#*=}
+      ;;
+    --smtp-secure=*)
+      SMTP_SECURE_ARG=${1#*=}
+      ;;
+    --smtp-secure)
+      [ "$#" -ge 2 ] || die "Missing value for --smtp-secure"
+      shift
+      SMTP_SECURE_ARG=$1
+      ;;
+    SMTP_SECURE=*)
+      SMTP_SECURE_ARG=${1#*=}
+      ;;
+    --smtp-user=*)
+      SMTP_USER_ARG=${1#*=}
+      ;;
+    --smtp-user)
+      [ "$#" -ge 2 ] || die "Missing value for --smtp-user"
+      shift
+      SMTP_USER_ARG=$1
+      ;;
+    SMTP_USER=*)
+      SMTP_USER_ARG=${1#*=}
+      ;;
+    --smtp-pass=*)
+      SMTP_PASS_ARG=${1#*=}
+      ;;
+    --smtp-pass)
+      [ "$#" -ge 2 ] || die "Missing value for --smtp-pass"
+      shift
+      SMTP_PASS_ARG=$1
+      ;;
+    SMTP_PASS=*)
+      SMTP_PASS_ARG=${1#*=}
       ;;
     --smtp-from=*)
       SMTP_FROM_ARG=${1#*=}
@@ -239,6 +291,10 @@ ACCESS_TOKEN_TTL_SECONDS_VALUE=$(read_env_value ACCESS_TOKEN_TTL_SECONDS "900")
 REFRESH_TOKEN_TTL_DAYS_VALUE=$(read_env_value REFRESH_TOKEN_TTL_DAYS "30")
 KAKAO_MAP_APP_KEY_VALUE=$(pick_value "$KAKAO_MAP_APP_KEY_ARG" KAKAO_MAP_APP_KEY "")
 SMTP_HOST_VALUE=$(pick_value "$SMTP_HOST_ARG" SMTP_HOST "")
+SMTP_PORT_VALUE=$(pick_value "$SMTP_PORT_ARG" SMTP_PORT "587")
+SMTP_SECURE_VALUE=$(pick_value "$SMTP_SECURE_ARG" SMTP_SECURE "false")
+SMTP_USER_VALUE=$(pick_value "$SMTP_USER_ARG" SMTP_USER "")
+SMTP_PASS_VALUE=$(pick_value "$SMTP_PASS_ARG" SMTP_PASS "")
 SMTP_FROM_VALUE=$(pick_value "$SMTP_FROM_ARG" SMTP_FROM "")
 LOCAL_EMAIL_VERIFY_TOKEN_VALUE=$(read_env_value LOCAL_EMAIL_VERIFY_TOKEN "local-email-verify-token")
 LOCAL_PASSWORD_RESET_TOKEN_VALUE=$(read_env_value LOCAL_PASSWORD_RESET_TOKEN "local-password-reset-token")
@@ -266,6 +322,10 @@ REFRESH_TOKEN_TTL_DAYS=$REFRESH_TOKEN_TTL_DAYS_VALUE
 APP_PUBLIC_URL=$APP_PUBLIC_URL_VALUE
 KAKAO_MAP_APP_KEY=$KAKAO_MAP_APP_KEY_VALUE
 SMTP_HOST=$SMTP_HOST_VALUE
+SMTP_PORT=$SMTP_PORT_VALUE
+SMTP_SECURE=$SMTP_SECURE_VALUE
+SMTP_USER=$SMTP_USER_VALUE
+SMTP_PASS=$SMTP_PASS_VALUE
 SMTP_FROM=$SMTP_FROM_VALUE
 LOCAL_EMAIL_VERIFY_TOKEN=$LOCAL_EMAIL_VERIFY_TOKEN_VALUE
 LOCAL_PASSWORD_RESET_TOKEN=$LOCAL_PASSWORD_RESET_TOKEN_VALUE
