@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Bell, Home, LogIn, MapPinned, Search, User } from "lucide-react";
+import { Bell, CircleHelp, Home, LogIn, MapPinned, Search, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { authStorage } from "@/lib/auth-storage";
@@ -20,6 +20,7 @@ const publicTabs: Tab[] = [
   { href: "/campus-map", icon: MapPinned },
   { href: "/dashboard", icon: Home },
   { href: "/search", icon: Search },
+  { href: "/help", icon: CircleHelp },
 ];
 const notificationsTab: Tab = { href: "/notifications", icon: Bell };
 const myPageTab: Tab = { href: "/my-page", icon: User };
@@ -28,6 +29,7 @@ const signInTab: Tab = { href: "/login", icon: LogIn };
 function getActiveTab(pathname: string): string {
   if (pathname.startsWith("/campus-map")) return "/campus-map";
   if (pathname.startsWith("/search")) return "/search";
+  if (pathname.startsWith("/help")) return "/help";
   if (pathname.startsWith("/notifications")) return "/notifications";
   if (pathname.startsWith("/my-page")) return "/my-page";
   if (pathname.startsWith("/login")) return "/login";
@@ -52,14 +54,14 @@ export function BottomTabBar() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border">
-      <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-8">
+      <div className="flex h-16 max-w-lg items-center justify-around px-3 mx-auto">
         {tabs.map(({ href, icon: Icon, badge = 0 }) => {
           const isActive = activeHref === href;
           return (
             <Link
               key={href}
               href={href}
-              className={`relative flex items-center justify-center w-12 h-12 rounded-xl transition-colors ${
+              className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors ${
                 isActive
                   ? "text-primary"
                   : "text-muted-foreground hover:text-foreground"
