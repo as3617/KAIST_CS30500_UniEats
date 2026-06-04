@@ -161,9 +161,11 @@ sh deploy.sh APP_PUBLIC_URL=https://unieats.ssrf.kr KAKAO_MAP_APP_KEY=your-kakao
 ```
 
 The deploy script accepts optional `OCR_PROVIDER`, `SMTP_HOST`, `SMTP_FROM`,
-`KAKAO_MAP_APP_KEY`, and `APP_PUBLIC_URL` values. `APP_PUBLIC_URL` is also used
-as `CORS_ORIGIN`, and its host is used as `TLS_DOMAIN`. The script generates a
-fresh `OCR_WEBHOOK_SECRET` each time it runs.
+`KAKAO_MAP_APP_KEY`, `APP_PUBLIC_URL`, and `LETSENCRYPT_EMAIL` values.
+`APP_PUBLIC_URL` is also used as `CORS_ORIGIN`, and its host is used as
+`TLS_DOMAIN`. The script generates a fresh `OCR_WEBHOOK_SECRET` each time it
+runs. Add `--issue-cert` with `LETSENCRYPT_EMAIL` on a public server to request
+and install a Let's Encrypt certificate automatically.
 
 By default, nginx listens on `http://localhost` and `https://localhost`.
 Set `TLS_DOMAIN=unieats.ssrf.kr` and map that domain to the deployment host to

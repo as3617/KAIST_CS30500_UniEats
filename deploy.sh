@@ -17,11 +17,14 @@ Options:
   --smtp-from VALUE             Sender email address used by the backend mailer
   --kakao-map-app-key VALUE     Kakao JavaScript map app key for the frontend
   --app-public-url VALUE        Public app origin. Also sets CORS_ORIGIN and TLS_DOMAIN
+  --letsencrypt-email VALUE     Email address for Let's Encrypt registration
+  --issue-cert                  Issue the domain certificate after startup
+  --staging                     Use the Let's Encrypt staging endpoint with --issue-cert
   --dry-run                     Generate deploy/.env without starting containers
   -h, --help                    Show this help message
 
 Environment-style arguments are also accepted:
-  sh deploy.sh OCR_PROVIDER=tesseract APP_PUBLIC_URL=https://unieats.ssrf.kr
+  sh deploy.sh OCR_PROVIDER=tesseract APP_PUBLIC_URL=https://unieats.ssrf.kr LETSENCRYPT_EMAIL=admin@example.com
 
 If an option is omitted, the script keeps the existing deploy/.env value when
 present, otherwise it uses a local-safe default. OCR_WEBHOOK_SECRET is generated
@@ -34,11 +37,14 @@ ENV_FILE="$SCRIPT_DIR/deploy/.env"
 COMPOSE_FILE="$SCRIPT_DIR/deploy/docker-compose.yml"
 
 DRY_RUN=0
+ISSUE_CERT=0
+LETSENCRYPT_STAGING=0
 OCR_PROVIDER_ARG=""
 SMTP_HOST_ARG=""
 SMTP_FROM_ARG=""
 KAKAO_MAP_APP_KEY_ARG=""
 APP_PUBLIC_URL_ARG=""
+LETSENCRYPT_EMAIL_ARG=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -96,6 +102,23 @@ while [ "$#" -gt 0 ]; do
       ;;
     APP_PUBLIC_URL=*)
       APP_PUBLIC_URL_ARG=${1#*=}
+      ;;
+    --letsencrypt-email=*)
+      LETSENCRYPT_EMAIL_ARG=${1#*=}
+      ;;
+    --letsencrypt-email)
+      [ "$#" -ge 2 ] || die "Missing value for --letsencrypt-email"
+      shift
+      LETSENCRYPT_EMAIL_ARG=$1
+      ;;
+    LETSENCRYPT_EMAIL=*)
+      LETSENCRYPT_EMAIL_ARG=${1#*=}
+      ;;
+    --issue-cert)
+      ISSUE_CERT=1
+      ;;
+    --staging)
+      LETSENCRYPT_STAGING=1
       ;;
     --dry-run)
       DRY_RUN=1
@@ -210,7 +233,7 @@ OCR_WEBHOOK_SECRET_VALUE=$(random_hex)
 APP_PORT_VALUE=$(read_env_value APP_PORT "80")
 APP_HTTPS_PORT_VALUE=$(read_env_value APP_HTTPS_PORT "443")
 TLS_CERT_NAME_VALUE=$(read_env_value TLS_CERT_NAME "local-selfsigned")
-LETSENCRYPT_EMAIL_VALUE=$(read_env_value LETSENCRYPT_EMAIL "")
+LETSENCRYPT_EMAIL_VALUE=$(pick_value "$LETSENCRYPT_EMAIL_ARG" LETSENCRYPT_EMAIL "")
 MONGO_INITDB_DATABASE_VALUE=$(read_env_value MONGO_INITDB_DATABASE "unieats")
 ACCESS_TOKEN_TTL_SECONDS_VALUE=$(read_env_value ACCESS_TOKEN_TTL_SECONDS "900")
 REFRESH_TOKEN_TTL_DAYS_VALUE=$(read_env_value REFRESH_TOKEN_TTL_DAYS "30")
@@ -228,7 +251,8 @@ KAIST_MENU_SYNC_RETRY_SECONDS_VALUE=$(read_env_value KAIST_MENU_SYNC_RETRY_SECON
 KAIST_MENU_SYNC_DAYS_VALUE=$(read_env_value KAIST_MENU_SYNC_DAYS "7")
 KAIST_MENU_SYNC_START_DATE_VALUE=$(read_env_value KAIST_MENU_SYNC_START_DATE "")
 
-cat > "$ENV_FILE" <<EOF
+write_env_file() {
+  cat > "$ENV_FILE" <<EOF
 APP_PORT=$APP_PORT_VALUE
 APP_HTTPS_PORT=$APP_HTTPS_PORT_VALUE
 TLS_DOMAIN=$TLS_DOMAIN_VALUE
@@ -256,17 +280,23 @@ KAIST_MENU_SYNC_DAYS=$KAIST_MENU_SYNC_DAYS_VALUE
 KAIST_MENU_SYNC_START_DATE=$KAIST_MENU_SYNC_START_DATE_VALUE
 EOF
 
-if command -v chmod >/dev/null 2>&1; then
-  chmod 600 "$ENV_FILE" 2>/dev/null || true
-fi
+  if command -v chmod >/dev/null 2>&1; then
+    chmod 600 "$ENV_FILE" 2>/dev/null || true
+  fi
+}
 
+write_env_file
 printf 'Wrote %s\n' "$ENV_FILE"
 printf 'APP_PUBLIC_URL=%s\n' "$APP_PUBLIC_URL_VALUE"
 printf 'CORS_ORIGIN=%s\n' "$APP_PUBLIC_URL_VALUE"
 printf 'TLS_DOMAIN=%s\n' "$TLS_DOMAIN_VALUE"
+printf 'TLS_CERT_NAME=%s\n' "$TLS_CERT_NAME_VALUE"
 printf 'OCR_WEBHOOK_SECRET=randomized\n'
 
 if [ "$DRY_RUN" -eq 1 ]; then
+  if [ "$ISSUE_CERT" -eq 1 ]; then
+    printf 'Dry run complete; certificate issuance was not started.\n'
+  fi
   printf 'Dry run complete; Docker Compose was not started.\n'
   exit 0
 fi
@@ -275,3 +305,58 @@ command -v docker >/dev/null 2>&1 || die "docker command is required to deploy"
 
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --build
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --force-recreate --no-deps nginx
+
+issue_certificate() {
+  [ -n "$LETSENCRYPT_EMAIL_VALUE" ] || die "--issue-cert requires --letsencrypt-email or LETSENCRYPT_EMAIL"
+
+  case "$APP_PUBLIC_URL_VALUE" in
+    https://*)
+      ;;
+    *)
+      die "--issue-cert requires APP_PUBLIC_URL to use https"
+      ;;
+  esac
+
+  case "$TLS_DOMAIN_VALUE" in
+    localhost|127.*|0.0.0.0)
+      die "--issue-cert requires a public DNS name, not $TLS_DOMAIN_VALUE"
+      ;;
+  esac
+
+  printf 'Requesting Let'\''s Encrypt certificate for %s\n' "$TLS_DOMAIN_VALUE"
+
+  if [ "$LETSENCRYPT_STAGING" -eq 1 ]; then
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile tls run --rm certbot certonly \
+      --webroot \
+      --webroot-path /var/www/certbot \
+      --email "$LETSENCRYPT_EMAIL_VALUE" \
+      --agree-tos \
+      --no-eff-email \
+      --non-interactive \
+      --keep-until-expiring \
+      --staging \
+      --cert-name "$TLS_DOMAIN_VALUE" \
+      -d "$TLS_DOMAIN_VALUE"
+  else
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile tls run --rm certbot certonly \
+      --webroot \
+      --webroot-path /var/www/certbot \
+      --email "$LETSENCRYPT_EMAIL_VALUE" \
+      --agree-tos \
+      --no-eff-email \
+      --non-interactive \
+      --keep-until-expiring \
+      --cert-name "$TLS_DOMAIN_VALUE" \
+      -d "$TLS_DOMAIN_VALUE"
+  fi
+
+  TLS_CERT_NAME_VALUE=$TLS_DOMAIN_VALUE
+  write_env_file
+  printf 'Updated TLS_CERT_NAME=%s in %s\n' "$TLS_CERT_NAME_VALUE" "$ENV_FILE"
+
+  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --force-recreate --no-deps nginx
+}
+
+if [ "$ISSUE_CERT" -eq 1 ]; then
+  issue_certificate
+fi

@@ -20,12 +20,27 @@ sh deploy.sh \
   SMTP_HOST=smtp.example.com \
   SMTP_FROM=no-reply@unieats.ssrf.kr \
   KAKAO_MAP_APP_KEY=your-kakao-key \
+  LETSENCRYPT_EMAIL=admin@example.com \
   APP_PUBLIC_URL=https://unieats.ssrf.kr
 ```
 
 `APP_PUBLIC_URL` is normalized to an origin and written to both `APP_PUBLIC_URL`
 and `CORS_ORIGIN`. Its host is written to `TLS_DOMAIN`. `OCR_WEBHOOK_SECRET` is
 randomized every time the script runs.
+
+To request and install a Let's Encrypt certificate in the same deploy run:
+
+```bash
+sh deploy.sh \
+  APP_PUBLIC_URL=https://unieats.ssrf.kr \
+  KAKAO_MAP_APP_KEY=your-kakao-key \
+  LETSENCRYPT_EMAIL=admin@example.com \
+  --issue-cert
+```
+
+The script starts nginx with the local fallback certificate first so that the
+HTTP-01 challenge path is reachable. If certificate issuance succeeds, it updates
+`TLS_CERT_NAME` to the public domain and recreates nginx.
 
 ## Local HTTPS
 
@@ -40,29 +55,30 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 
 ## Production certificate issuance
 
-Before requesting a real certificate, ensure that:
+Before requesting a real certificate with `--issue-cert`, ensure that:
 
 - `unieats.ssrf.kr` points to the public deployment host.
 - Ports 80 and 443 are reachable from the internet.
-- `LETSENCRYPT_EMAIL` is set in `deploy/.env`.
+- `LETSENCRYPT_EMAIL` is passed to `deploy.sh` or already set in `deploy/.env`.
 
-Then request a certificate with the webroot challenge:
+Use the staging endpoint first if you want to test the ACME flow without hitting
+production rate limits:
 
 ```bash
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile tls run --rm certbot certonly \
-  --webroot \
-  --webroot-path /var/www/certbot \
-  --email "$LETSENCRYPT_EMAIL" \
-  --agree-tos \
-  --no-eff-email \
-  -d "$TLS_DOMAIN"
+sh deploy.sh \
+  APP_PUBLIC_URL=https://unieats.ssrf.kr \
+  LETSENCRYPT_EMAIL=admin@example.com \
+  --issue-cert \
+  --staging
 ```
 
-After issuance, set `TLS_CERT_NAME` to the domain certificate name if needed and
-restart nginx:
+Then run against the production endpoint:
 
 ```bash
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d nginx
+sh deploy.sh \
+  APP_PUBLIC_URL=https://unieats.ssrf.kr \
+  LETSENCRYPT_EMAIL=admin@example.com \
+  --issue-cert
 ```
 
 For renewal, run the certbot renewal command and reload nginx:
