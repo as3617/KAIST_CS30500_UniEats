@@ -11,6 +11,7 @@ import {
   MenuServing,
   MenuServingSchema,
 } from "../menu-servings/schemas/menu-serving.schema";
+import { NotificationsModule } from "../notifications/notifications.module";
 import { Receipt, ReceiptSchema } from "../receipts/schemas/receipt.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { ReviewsController } from "./reviews.controller";
@@ -20,6 +21,7 @@ import { Review, ReviewSchema } from "./schemas/review.schema";
 @Module({
   imports: [
     AuthModule,
+    NotificationsModule,
     MongooseModule.forFeature([
       { name: Review.name, schema: ReviewSchema },
       { name: Receipt.name, schema: ReceiptSchema },

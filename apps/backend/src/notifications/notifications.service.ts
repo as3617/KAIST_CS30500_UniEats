@@ -1,8 +1,22 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
+import { NotificationResourceType, NotificationType } from "../common/enums";
 import { toObjectId } from "../common/object-id";
 import { Notification } from "./schemas/notification.schema";
+
+export interface NotificationCreateInput {
+  userId: string | Types.ObjectId;
+  type: NotificationType;
+  title: string;
+  message: string;
+  resourceType?: NotificationResourceType;
+  resourceId?: string | Types.ObjectId;
+}
+
+export type NotificationCreateManyInput = Omit<NotificationCreateInput, "userId"> & {
+  userIds: Array<string | Types.ObjectId>;
+};
 
 @Injectable()
 export class NotificationsService {
@@ -10,6 +24,44 @@ export class NotificationsService {
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<Notification>,
   ) {}
+
+  async createForUser(input: NotificationCreateInput) {
+    const notification = await this.notificationModel.create({
+      userId: this.normalizeObjectId(input.userId, "userId"),
+      type: input.type,
+      title: input.title,
+      message: input.message,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId
+        ? this.normalizeObjectId(input.resourceId, "resourceId")
+        : undefined,
+    });
+
+    return this.toResponse(notification.toObject());
+  }
+
+  async createForUsers(input: NotificationCreateManyInput) {
+    const userIds = this.uniqueObjectIds(input.userIds, "userIds");
+    if (userIds.length === 0) {
+      return { createdCount: 0 };
+    }
+
+    const notifications = await this.notificationModel.insertMany(
+      userIds.map((userId) => ({
+        userId,
+        type: input.type,
+        title: input.title,
+        message: input.message,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId
+          ? this.normalizeObjectId(input.resourceId, "resourceId")
+          : undefined,
+      })),
+      { ordered: false },
+    );
+
+    return { createdCount: notifications.length };
+  }
 
   async findUserNotifications(userId: string, limit: number = 50) {
     const userObjectId = toObjectId(userId, "userId");
@@ -47,7 +99,7 @@ export class NotificationsService {
         {
           $set: { readAt: new Date() },
         },
-        { new: true },
+        { returnDocument: "after" },
       )
       .lean()
       .exec();
@@ -74,6 +126,29 @@ export class NotificationsService {
       .exec();
 
     return { updatedCount: result.modifiedCount };
+  }
+
+  private normalizeObjectId(value: string | Types.ObjectId, fieldName: string) {
+    if (value instanceof Types.ObjectId) {
+      return value;
+    }
+    return toObjectId(value, fieldName);
+  }
+
+  private uniqueObjectIds(values: Array<string | Types.ObjectId>, fieldName: string) {
+    const seen = new Set<string>();
+    const objectIds: Types.ObjectId[] = [];
+
+    values.forEach((value, index) => {
+      const objectId = this.normalizeObjectId(value, `${fieldName}.${index}`);
+      const key = objectId.toString();
+      if (!seen.has(key)) {
+        seen.add(key);
+        objectIds.push(objectId);
+      }
+    });
+
+    return objectIds;
   }
 
   private toResponse(notification: any) {

@@ -1,8 +1,14 @@
 // Mutable in-process state for the mock API. Uses globalThis to survive
 // Next.js hot-module reloads in development without losing added entries.
 
-import type { Meal, MenuServing, Receipt, Review } from "@/types";
-import { mockMeals, mockMenuServings, mockReceipts, mockReviews } from "./data";
+import type { Meal, MenuServing, Notification, Receipt, Review } from "@/types";
+import {
+  mockMeals,
+  mockMenuServings,
+  mockNotifications,
+  mockReceipts,
+  mockReviews,
+} from "./data";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -13,6 +19,8 @@ declare global {
   var __menuServingsStore: MenuServing[] | undefined;
   // eslint-disable-next-line no-var
   var __mealsStore: Meal[] | undefined;
+  // eslint-disable-next-line no-var
+  var __notificationsStore: Notification[] | undefined;
 }
 
 globalThis.__mealsStore ??= mockMeals.map((meal) => ({
@@ -29,8 +37,12 @@ globalThis.__menuServingsStore ??= mockMenuServings.map((serving) => ({
   cafeteria: { ...serving.cafeteria },
   meal: { ...serving.meal },
 }));
+globalThis.__notificationsStore ??= mockNotifications.map((notification) => ({
+  ...notification,
+}));
 
 export const receiptsStore: Receipt[] = globalThis.__receiptsStore;
 export const reviewsStore: Review[] = globalThis.__reviewsStore;
 export const menuServingsStore: MenuServing[] = globalThis.__menuServingsStore;
 export const mealsStore: Meal[] = globalThis.__mealsStore;
+export const notificationsStore: Notification[] = globalThis.__notificationsStore;

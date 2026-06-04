@@ -5,6 +5,7 @@ import type {
   Cafeteria,
   Meal,
   MenuServing,
+  Notification,
   Receipt,
   Review,
   User,
@@ -407,6 +408,39 @@ export const mockReceipts: Receipt[] = [
     confirmedMenuServingId: "ms_kaimaru_curry_lunch",
     usedForReview: true,
     reviewId: "rev_003",
+  },
+];
+
+export const mockNotifications: Notification[] = [
+  {
+    id: "noti_manager_reply",
+    type: "MANAGER_REPLY",
+    title: "리뷰에 답변이 등록되었습니다.",
+    message: "작성하신 리뷰에 식당 매니저 답변이 등록되었습니다.",
+    resourceType: "REVIEW",
+    resourceId: "rev_003",
+    readAt: null,
+    createdAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+  },
+  {
+    id: "noti_receipt_ready",
+    type: "REVIEW_AVAILABLE",
+    title: "리뷰를 작성할 수 있습니다.",
+    message: "영수증이 확인되어 리뷰 작성이 가능해졌습니다.",
+    resourceType: "RECEIPT",
+    resourceId: "rcp_003",
+    readAt: null,
+    createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+  },
+  {
+    id: "noti_menu_sold_out",
+    type: "MENU_STATUS_UPDATED",
+    title: "Pasta Carbonara 상태가 변경되었습니다.",
+    message: "Kaimaru의 Pasta Carbonara 메뉴가 품절 상태로 변경되었습니다.",
+    resourceType: "MENU_SERVING",
+    resourceId: "ms_kaimaru_pasta_dinner",
+    readAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
+    createdAt: new Date(Date.now() - 1000 * 60 * 70).toISOString(),
   },
 ];
 

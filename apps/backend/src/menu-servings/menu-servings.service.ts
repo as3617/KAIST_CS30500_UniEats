@@ -24,11 +24,15 @@ import {
   ManagerRole,
   MealTime,
   MenuServingStatus,
+  NotificationResourceType,
+  NotificationType,
   UserRole,
 } from "../common/enums";
 import { toObjectId } from "../common/object-id";
 import { parsePagination } from "../common/pagination";
+import { Favorite } from "../favorites/schemas/favorite.schema";
 import { Meal } from "../meals/schemas/meal.schema";
+import { NotificationsService } from "../notifications/notifications.service";
 import { User } from "../users/schemas/user.schema";
 import { MenuServingEventsService } from "./menu-serving-events.service";
 import { MenuServing } from "./schemas/menu-serving.schema";
@@ -94,8 +98,11 @@ export class MenuServingsService {
     private readonly userModel: Model<User>,
     @InjectModel(CafeteriaManager.name)
     private readonly cafeteriaManagerModel: Model<CafeteriaManager>,
+    @InjectModel(Favorite.name)
+    private readonly favoriteModel: Model<Favorite>,
     private readonly authService: AuthService,
     private readonly menuServingEventsService: MenuServingEventsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findAll(
@@ -283,6 +290,13 @@ export class MenuServingsService {
       updatedAt: new Date().toISOString(),
     });
 
+    if (
+      existingServing.status !== serving.status &&
+      serving.status !== MenuServingStatus.HIDDEN
+    ) {
+      await this.notifyFavoriteUsersOfStatusUpdate(serving);
+    }
+
     return response;
   }
 
@@ -421,6 +435,38 @@ export class MenuServingsService {
     }
 
     return serving;
+  }
+
+  private async notifyFavoriteUsersOfStatusUpdate(serving: any) {
+    const mealId = this.objectIdFromPopulated(serving.mealId);
+    if (!mealId) {
+      return;
+    }
+
+    const favorites = await this.favoriteModel
+      .find({ mealId })
+      .select("userId")
+      .lean()
+      .exec();
+
+    const userIds = favorites.map((favorite) => favorite.userId as Types.ObjectId);
+    if (userIds.length === 0) {
+      return;
+    }
+
+    const mealName = this.populatedName(serving.mealId) ?? "즐겨찾기 메뉴";
+    const cafeteriaName = this.populatedName(serving.cafeteriaId) ?? "식당";
+    const statusLabel =
+      serving.status === MenuServingStatus.SOLD_OUT ? "품절" : "판매 가능";
+
+    await this.notificationsService.createForUsers({
+      userIds,
+      type: NotificationType.MENU_STATUS_UPDATED,
+      title: `${mealName} 상태가 변경되었습니다.`,
+      message: `${cafeteriaName}의 ${mealName} 메뉴가 ${statusLabel} 상태로 변경되었습니다.`,
+      resourceType: NotificationResourceType.MENU_SERVING,
+      resourceId: serving._id as Types.ObjectId,
+    });
   }
 
   private normalizeCreateBody(body?: MenuServingCreateBody) {
@@ -702,6 +748,32 @@ export class MenuServingsService {
       hasConflict: matchedAllergens.length > 0,
       matchedAllergens,
     };
+  }
+
+  private objectIdFromPopulated(value: any): Types.ObjectId | undefined {
+    if (!value) {
+      return undefined;
+    }
+    if (value instanceof Types.ObjectId) {
+      return value;
+    }
+    if (value._id instanceof Types.ObjectId) {
+      return value._id;
+    }
+    if (typeof value === "string" && Types.ObjectId.isValid(value)) {
+      return new Types.ObjectId(value);
+    }
+    if (typeof value._id === "string" && Types.ObjectId.isValid(value._id)) {
+      return new Types.ObjectId(value._id);
+    }
+    return undefined;
+  }
+
+  private populatedName(value: any): string | undefined {
+    if (!value || value instanceof Types.ObjectId) {
+      return undefined;
+    }
+    return value.name ?? value._id?.toString?.();
   }
 
   private toCafeteriaSummary(cafeteria: any) {
