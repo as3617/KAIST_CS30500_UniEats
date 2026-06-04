@@ -18,6 +18,7 @@ import { MenuServingCard } from "@/components/menu-serving-card";
 import { ApiClientError, api } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
 import { todayInSeoul } from "@/lib/date";
+import { useFavoriteMeals } from "@/lib/use-favorite-meals";
 import {
   applyMenuServingStatusUpdate,
   useMenuServingStatusEvents,
@@ -68,6 +69,11 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
   const [cafeteriaId, setCafeteriaId] = useState(initialCafeteriaId);
   const [mealTime, setMealTime] = useState<MealTime | "">("");
   const [hideAllergyConflicts, setHideAllergyConflicts] = useState(false);
+  const {
+    favoriteMealIds,
+    pendingMealIds: pendingFavoriteMealIds,
+    toggleFavorite,
+  } = useFavoriteMeals(Boolean(user));
   const hasActiveFilters = Boolean(
     searchQuery ||
       category ||
@@ -187,6 +193,23 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
     setCafeteriaId("");
     setMealTime("");
     setHideAllergyConflicts(false);
+  }
+
+  async function handleToggleFavorite(serving: MenuServing) {
+    if (!user) {
+      window.location.href = "/login";
+      return;
+    }
+
+    try {
+      await toggleFavorite(serving.meal.id);
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Failed to update favorite meal.",
+      );
+    }
   }
 
   return (
@@ -454,7 +477,12 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
           <ul className="grid gap-4 sm:grid-cols-2">
             {items.map((item) => (
               <li key={item.id}>
-                <MenuServingCard serving={item} />
+                <MenuServingCard
+                  serving={item}
+                  isFavorite={favoriteMealIds.has(item.meal.id)}
+                  isFavoritePending={pendingFavoriteMealIds.has(item.meal.id)}
+                  onToggleFavorite={handleToggleFavorite}
+                />
               </li>
             ))}
           </ul>

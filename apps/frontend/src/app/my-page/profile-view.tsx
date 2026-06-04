@@ -2,8 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ChevronRight, Save, ShieldAlert, Star } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Heart,
+  Save,
+  ShieldAlert,
+  Star,
+  Trash2,
+} from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,9 +25,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiClientError, api } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
+import { useFavoriteMeals } from "@/lib/use-favorite-meals";
 import {
   ALLERGY_CODES,
   ALLERGY_LABELS,
+  CATEGORY_LABELS,
   DIETARY_LABEL_CODES,
   DIETARY_LABELS,
 } from "@/types";
@@ -26,6 +37,7 @@ import type {
   AllergyCode,
   DietaryLabelCode,
   DietaryProfile,
+  FavoriteMeal,
   UserProfile,
 } from "@/types";
 
@@ -45,6 +57,13 @@ export function ProfileView() {
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const {
+    favoriteMeals,
+    pendingMealIds: pendingFavoriteMealIds,
+    isLoading: isFavoritesLoading,
+    error: favoritesError,
+    toggleFavorite,
+  } = useFavoriteMeals(Boolean(profile));
 
   useEffect(() => {
     let isCurrent = true;
@@ -97,6 +116,14 @@ export function ProfileView() {
       setError(toMessage(err, "Failed to update your profile."));
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleRemoveFavorite(mealId: string) {
+    try {
+      await toggleFavorite(mealId);
+    } catch (err) {
+      setError(toMessage(err, "Failed to update favorite meals."));
     }
   }
 
@@ -161,6 +188,14 @@ export function ProfileView() {
           </Link>
         </CardContent>
       </Card>
+
+      <FavoriteMealsCard
+        favorites={favoriteMeals}
+        isLoading={isFavoritesLoading}
+        error={favoritesError}
+        pendingMealIds={pendingFavoriteMealIds}
+        onRemove={handleRemoveFavorite}
+      />
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <Card>
@@ -290,6 +325,98 @@ export function ProfileView() {
   );
 }
 
+function FavoriteMealsCard({
+  favorites,
+  isLoading,
+  error,
+  pendingMealIds,
+  onRemove,
+}: {
+  favorites: FavoriteMeal[];
+  isLoading: boolean;
+  error: string | null;
+  pendingMealIds: Set<string>;
+  onRemove: (mealId: string) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Heart className="h-4 w-4 text-primary" />
+          Favorite meals
+        </CardTitle>
+        <CardDescription>
+          Saved meals receive menu status notifications when they appear on campus menus.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          >
+            {error}
+          </p>
+        ) : isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading favorite meals...</p>
+        ) : favorites.length === 0 ? (
+          <div className="rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
+            No favorite meals yet.
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {favorites.map((favorite) => {
+              const mealName = favorite.meal?.name ?? "Saved meal";
+              return (
+                <li
+                  key={favorite.mealId}
+                  className="flex items-center gap-3 rounded-lg border px-4 py-3"
+                >
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Link
+                      href={`/search?q=${encodeURIComponent(mealName)}`}
+                      className="font-medium hover:underline"
+                    >
+                      {mealName}
+                    </Link>
+                    <p className="text-xs text-muted-foreground">
+                      {favorite.meal
+                        ? CATEGORY_LABELS[favorite.meal.category]
+                        : "Meal"}
+                      {favorite.createdAt
+                        ? ` · Saved ${formatFavoriteDate(favorite.createdAt)}`
+                        : ""}
+                    </p>
+                    {favorite.meal?.dietaryLabels.length ? (
+                      <div className="flex flex-wrap gap-1">
+                        {favorite.meal.dietaryLabels.map((label) => (
+                          <Badge key={label} variant="outline" className="text-xs">
+                            {DIETARY_LABELS[label]}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove ${mealName} from favorites`}
+                    disabled={pendingMealIds.has(favorite.mealId)}
+                    onClick={() => onRemove(favorite.mealId)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function BackToDashboard() {
   return (
     <Button asChild variant="ghost" size="sm">
@@ -364,6 +491,16 @@ function toDietaryProfile(form: ProfileForm): DietaryProfile {
 
 function parseIngredients(value: string) {
   return [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))];
+}
+
+function formatFavoriteDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
 function toMessage(error: unknown, fallback: string) {

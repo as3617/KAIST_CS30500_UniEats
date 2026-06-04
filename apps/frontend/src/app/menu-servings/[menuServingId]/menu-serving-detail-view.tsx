@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ArrowLeft, MapPin } from "lucide-react";
 
+import { FavoriteMealButton } from "@/components/favorite-meal-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,16 +16,18 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ApiClientError, api } from "@/lib/api";
+import { authStorage } from "@/lib/auth-storage";
 import { formatPriceKRW } from "@/lib/date";
 import { useMenuServingStatusEvents } from "@/lib/menu-serving-events";
 import type { MenuServingStatusUpdate } from "@/lib/menu-serving-events";
+import { useFavoriteMeals } from "@/lib/use-favorite-meals";
 import {
   ALLERGY_LABELS,
   CATEGORY_LABELS,
   DIETARY_LABELS,
   MEAL_TIME_LABELS,
 } from "@/types";
-import type { MenuServingDetail } from "@/types";
+import type { MenuServingDetail, User } from "@/types";
 
 type MenuServingDetailViewProps = {
   menuServingId: string;
@@ -32,9 +36,24 @@ type MenuServingDetailViewProps = {
 export function MenuServingDetailView({
   menuServingId,
 }: MenuServingDetailViewProps) {
+  const router = useRouter();
   const [serving, setServing] = useState<MenuServingDetail | null>(null);
+  const [user, setUser] = useState<Pick<
+    User,
+    "id" | "email" | "nickname" | "role" | "isEmailVerified"
+  > | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  const {
+    favoriteMealIds,
+    pendingMealIds: pendingFavoriteMealIds,
+    toggleFavorite,
+  } = useFavoriteMeals(Boolean(user));
+
+  useEffect(() => {
+    setUser(authStorage.getUser());
+  }, []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -74,6 +93,25 @@ export function MenuServingDetailView({
   );
 
   useMenuServingStatusEvents(handleMenuServingStatusUpdate);
+
+  async function handleToggleFavorite() {
+    if (!serving) return;
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    setFavoriteError(null);
+    try {
+      await toggleFavorite(serving.meal.id);
+    } catch (err) {
+      setFavoriteError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Failed to update favorite meal.",
+      );
+    }
+  }
 
   if (isLoading) {
     return (
@@ -116,6 +154,8 @@ export function MenuServingDetailView({
     { label: "Fat", value: serving.meal.nutrition.fat, unit: "g" },
     { label: "Sodium", value: serving.meal.nutrition.sodium, unit: "mg" },
   ].filter((fact) => fact.value !== undefined);
+  const isFavorite = favoriteMealIds.has(serving.meal.id);
+  const isFavoritePending = pendingFavoriteMealIds.has(serving.meal.id);
 
   return (
     <main className="container max-w-3xl space-y-6 py-8">
@@ -136,9 +176,17 @@ export function MenuServingDetailView({
                 {serving.meal.description ?? "No description available."}
               </p>
             </div>
-            <Badge variant={isSoldOut ? "destructive" : isHidden ? "outline" : "secondary"}>
-              {statusLabel}
-            </Badge>
+            <div className="flex shrink-0 items-center gap-2">
+              <Badge variant={isSoldOut ? "destructive" : isHidden ? "outline" : "secondary"}>
+                {statusLabel}
+              </Badge>
+              <FavoriteMealButton
+                isFavorite={isFavorite}
+                isPending={isFavoritePending}
+                showLabel
+                onToggle={handleToggleFavorite}
+              />
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="font-semibold text-foreground">{formatPriceKRW(serving.price)}</span>
@@ -147,6 +195,14 @@ export function MenuServingDetailView({
               {serving.averageRating.toFixed(1)} / 5 ({serving.verifiedReviewCount} verified)
             </span>
           </div>
+          {favoriteError ? (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            >
+              {favoriteError}
+            </p>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-6">
           {hasAllergyConflict ? (

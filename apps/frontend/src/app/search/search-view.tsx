@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { ApiClientError, api } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
 import { todayInSeoul } from "@/lib/date";
+import { useFavoriteMeals } from "@/lib/use-favorite-meals";
 import {
   applyMenuServingStatusUpdate,
   useMenuServingStatusEvents,
@@ -40,8 +41,13 @@ import type {
   User,
 } from "@/types";
 
-export function SearchView() {
+type SearchViewProps = {
+  initialQuery?: string;
+};
+
+export function SearchView({ initialQuery = "" }: SearchViewProps) {
   const today = useMemo(() => todayInSeoul(), []);
+  const normalizedInitialQuery = initialQuery.trim();
   const [items, setItems] = useState<MenuServing[]>([]);
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [user, setUser] = useState<Pick<User, "id" | "email" | "nickname"> | null>(
@@ -50,14 +56,19 @@ export function SearchView() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(normalizedInitialQuery);
+  const [searchQuery, setSearchQuery] = useState(normalizedInitialQuery);
   const [date, setDate] = useState(today);
   const [category, setCategory] = useState<CategoryCode | "">("");
   const [dietaryLabel, setDietaryLabel] = useState<DietaryLabelCode | "">("");
   const [cafeteriaId, setCafeteriaId] = useState("");
   const [mealTime, setMealTime] = useState<MealTime | "">("");
   const [hideAllergyConflicts, setHideAllergyConflicts] = useState(false);
+  const {
+    favoriteMealIds,
+    pendingMealIds: pendingFavoriteMealIds,
+    toggleFavorite,
+  } = useFavoriteMeals(Boolean(user));
 
   const hasActiveFilters = Boolean(
     searchQuery ||
@@ -140,6 +151,23 @@ export function SearchView() {
     setCafeteriaId("");
     setMealTime("");
     setHideAllergyConflicts(false);
+  }
+
+  async function handleToggleFavorite(serving: MenuServing) {
+    if (!user) {
+      window.location.href = "/login";
+      return;
+    }
+
+    try {
+      await toggleFavorite(serving.meal.id);
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Failed to update favorite meal.",
+      );
+    }
   }
 
   return (
@@ -321,7 +349,12 @@ export function SearchView() {
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => (
               <li key={item.id}>
-                <MenuServingCard serving={item} />
+                <MenuServingCard
+                  serving={item}
+                  isFavorite={favoriteMealIds.has(item.meal.id)}
+                  isFavoritePending={pendingFavoriteMealIds.has(item.meal.id)}
+                  onToggleFavorite={handleToggleFavorite}
+                />
               </li>
             ))}
           </ul>
