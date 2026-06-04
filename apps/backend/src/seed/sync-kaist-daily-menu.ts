@@ -465,22 +465,16 @@ function extractIngredients(items: string[]) {
     .flatMap((item) => item.split(/[\/,]/))
     .map(normalizeText)
     .filter((item) => item.length > 0)
+    .filter((item) => !isNumericOnlyIngredient(item))
     .slice(0, 20);
 }
 
 function extractAllergens(items: string[]) {
   const found = new Set<AllergyCode>();
   for (const item of items) {
-    const groups = [
-      ...item.matchAll(/\(([\d,\s.]+)\)/g),
-      ...item.matchAll(/(?:^|[\s/])((?:\d{1,2})(?:[,.]\s*\d{1,2})+)(?=$|[\s/*])/g),
-    ];
-    for (const group of groups) {
-      for (const number of group[1].split(/[,.]/).map((value) => value.trim())) {
-        const allergy = ALLERGY_BY_NUMBER[number];
-        if (allergy) {
-          found.add(allergy);
-        }
+    for (const marker of extractAllergyMarkers(item)) {
+      for (const number of parseAllergyMarkerNumbers(marker)) {
+        found.add(ALLERGY_BY_NUMBER[number]);
       }
     }
   }
@@ -542,7 +536,84 @@ function isIgnorableMenuLine(item: string) {
 }
 
 function stripAllergyMarkers(item: string) {
-  return item.replace(/(?:^|[\s/])(?:\d{1,2})(?:[,.]\s*\d{1,2})+(?=$|[\s/*])/g, " ");
+  let cleaned = item.replace(/\(([\d,\s.]+)\)/g, (match, marker: string) =>
+    isAllergyMarker(marker) ? " " : match,
+  );
+  cleaned = cleaned.replace(
+    /(?:^|[\s/])((?:\d{1,2})(?:[,.]\s*\d{1,2})+\s*[,.]?)(?=$|[\s/*])/g,
+    (match, marker: string) => (isAllergyMarker(marker) ? " " : match),
+  );
+
+  const trailingMarker = findTrailingAllergyMarker(cleaned);
+  if (trailingMarker) {
+    cleaned = cleaned.slice(0, trailingMarker.start);
+  }
+
+  return normalizeText(cleaned);
+}
+
+function extractAllergyMarkers(item: string) {
+  const markers: string[] = [];
+
+  for (const match of item.matchAll(/\(([\d,\s.]+)\)/g)) {
+    if (isAllergyMarker(match[1])) {
+      markers.push(match[1]);
+    }
+  }
+
+  for (const match of item.matchAll(
+    /(?:^|[\s/])((?:\d{1,2})(?:[,.]\s*\d{1,2})+\s*[,.]?)(?=$|[\s/*])/g,
+  )) {
+    if (isAllergyMarker(match[1])) {
+      markers.push(match[1]);
+    }
+  }
+
+  const trailingMarker = findTrailingAllergyMarker(item);
+  if (trailingMarker) {
+    markers.push(trailingMarker.marker);
+  }
+
+  return markers;
+}
+
+function findTrailingAllergyMarker(item: string) {
+  const match = item.match(/(\d{1,2}(?:\s*[,.]\s*\d{1,2})*\s*[,.]?)\s*$/);
+  if (!match || !isAllergyMarker(match[1])) {
+    return null;
+  }
+
+  const start = match.index ?? 0;
+  if (start === 0 || /\d$/.test(item.slice(0, start))) {
+    return null;
+  }
+
+  return {
+    marker: match[1],
+    start,
+  };
+}
+
+function isAllergyMarker(marker: string) {
+  const numbers = parseAllergyMarkerNumbers(marker);
+  return numbers.length > 0;
+}
+
+function parseAllergyMarkerNumbers(marker: string) {
+  const values = marker
+    .split(/[,.]/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (values.length === 0) {
+    return [];
+  }
+
+  return values.every((value) => Boolean(ALLERGY_BY_NUMBER[value])) ? values : [];
+}
+
+function isNumericOnlyIngredient(item: string) {
+  return /^[\d\s,.]+$/.test(item);
 }
 
 function mealTimeFromHeader(header: string) {
