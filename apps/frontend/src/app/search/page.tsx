@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   title: "Search",
 };
 
-export default function SearchPage() {
-  return <SearchView />;
+type SearchPageProps = {
+  searchParams?: {
+    q?: string;
+  };
+};
+
+export default function SearchPage({ searchParams }: SearchPageProps) {
+  return <SearchView initialQuery={searchParams?.q ?? ""} />;
 }

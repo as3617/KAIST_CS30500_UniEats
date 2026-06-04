@@ -32,12 +32,7 @@ export class FavoritesService {
       .lean()
       .exec();
 
-    return favorites.map((f) => ({
-      id: String(f._id),
-      mealId: typeof f.mealId === "object" && f.mealId !== null ? String(f.mealId._id) : String(f.mealId),
-      meal: typeof f.mealId === "object" && f.mealId !== null ? f.mealId : undefined,
-      createdAt: f.createdAt instanceof Date ? f.createdAt.toISOString() : undefined,
-    }));
+    return favorites.map((f) => this.toFavoriteResponse(f));
   }
 
   async add(userId: string, body: AddFavoriteBody) {
@@ -45,7 +40,11 @@ export class FavoritesService {
     if (!mealId) throw new BadRequestException("mealId is required");
 
     const _mealId = toObjectId(mealId, "mealId");
-    const meal = await this.mealModel.findById(_mealId).lean().exec();
+    const meal = await this.mealModel
+      .findById(_mealId)
+      .select("name category imageUrl dietaryLabels allergens")
+      .lean()
+      .exec();
     if (!meal) throw new NotFoundException("meal not found");
 
     try {
@@ -53,7 +52,10 @@ export class FavoritesService {
         userId: new Types.ObjectId(userId),
         mealId: _mealId,
       });
-      return { id: String(fav._id), mealId: String(fav.mealId) };
+      return this.toFavoriteResponse({
+        ...(fav as any).toObject(),
+        mealId: meal,
+      });
     } catch (err: any) {
       if (err?.code === 11000) throw new ConflictException("meal already in favorites");
       throw err;
@@ -67,5 +69,31 @@ export class FavoritesService {
       .exec();
     if (result.deletedCount === 0) throw new NotFoundException("favorite not found");
     return {};
+  }
+
+  private toFavoriteResponse(favorite: any) {
+    const meal =
+      typeof favorite.mealId === "object" && favorite.mealId !== null
+        ? favorite.mealId
+        : undefined;
+    const mealId = meal?._id ? String(meal._id) : String(favorite.mealId);
+
+    return {
+      id: String(favorite._id),
+      mealId,
+      meal: meal
+        ? {
+            id: mealId,
+            name: meal.name,
+            category: meal.category,
+            imageUrl: meal.imageUrl,
+            dietaryLabels: meal.dietaryLabels ?? [],
+            allergens: meal.allergens ?? [],
+          }
+        : undefined,
+      createdAt: favorite.createdAt instanceof Date
+        ? favorite.createdAt.toISOString()
+        : favorite.createdAt,
+    };
   }
 }

@@ -3,6 +3,7 @@
 
 import type {
   Cafeteria,
+  FavoriteMeal,
   Meal,
   MenuServing,
   Notification,
@@ -292,6 +293,15 @@ export const mockMeals: Meal[] = [
   },
 ];
 
+export const mockFavorites: FavoriteMeal[] = [
+  {
+    id: "fav_chicken_curry",
+    mealId: "m_chicken_curry",
+    meal: pickFavoriteMeal("m_chicken_curry"),
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
+  },
+];
+
 export const mockMenuServings: MenuServing[] = [
   {
     id: "ms_kaimaru_mackerel_lunch",
@@ -457,5 +467,20 @@ function pickMealCard(id: string): MenuServing["meal"] {
     ingredients: meal.ingredients,
     allergens: meal.allergens,
     dietaryLabels: meal.dietaryLabels,
+  };
+}
+
+function pickFavoriteMeal(id: string): FavoriteMeal["meal"] {
+  const meal = mockMeals.find((m) => m.id === id);
+  if (!meal) {
+    throw new Error(`mock meal ${id} not found`);
+  }
+  return {
+    id: meal.id,
+    name: meal.name,
+    category: meal.category,
+    imageUrl: meal.imageUrl,
+    dietaryLabels: meal.dietaryLabels,
+    allergens: meal.allergens,
   };
 }

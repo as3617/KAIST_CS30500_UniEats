@@ -90,6 +90,16 @@ export type Meal = {
   nutrition: NutritionFacts;
 };
 
+export type FavoriteMeal = {
+  id: string;
+  mealId: string;
+  meal?: Pick<
+    Meal,
+    "id" | "name" | "category" | "imageUrl" | "dietaryLabels" | "allergens"
+  >;
+  createdAt?: string;
+};
+
 export type AllergyWarning = {
   hasConflict: boolean;
   matchedAllergens: AllergyCode[];
