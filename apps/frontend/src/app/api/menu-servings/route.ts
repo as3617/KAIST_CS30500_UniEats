@@ -28,6 +28,16 @@ type Query = {
   limit?: string | null;
 };
 
+const PREFERRED_INGREDIENT_MATCH_CAP = 3;
+const DISLIKED_INGREDIENT_MATCH_CAP = 3;
+const PREFERRED_INGREDIENT_SORT_BOOST = 0.15;
+const DISLIKED_INGREDIENT_SORT_PENALTY = 0.25;
+
+type PersonalizationProfile = {
+  preferredIngredients: string[];
+  dislikedIngredients: string[];
+};
+
 export async function GET(request: NextRequest) {
   if (!shouldUseMockApi()) {
     return proxyToBackend(request);
@@ -56,6 +66,16 @@ export async function GET(request: NextRequest) {
   const userAllergies: AllergyCode[] = isAuthenticated
     ? mockUser.dietaryProfile.allergies
     : [];
+  const personalizationProfile: PersonalizationProfile | null = isAuthenticated
+    ? {
+        preferredIngredients: normalizeIngredientList(
+          mockUser.dietaryProfile.preferredIngredients,
+        ),
+        dislikedIngredients: normalizeIngredientList(
+          mockUser.dietaryProfile.dislikedIngredients,
+        ),
+      }
+    : null;
 
   let filtered = menuServingsStore.slice();
 
@@ -107,8 +127,11 @@ export async function GET(request: NextRequest) {
     query.hideAllergyConflicts === "true"
       ? decorated.filter((m) => !m.allergyWarning?.hasConflict)
       : decorated;
+  const rankedItems = hasIngredientPreferences(personalizationProfile)
+    ? sortByIngredientPreferences(items, personalizationProfile)
+    : items;
 
-  const paged = items.slice(offset, offset + limit);
+  const paged = rankedItems.slice(offset, offset + limit);
 
   return okJson({
     items: paged,
@@ -202,4 +225,93 @@ export async function POST(request: NextRequest) {
 
   menuServingsStore.push(serving);
   return createdJson(serving, "Menu serving created");
+}
+
+function hasIngredientPreferences(
+  profile: PersonalizationProfile | null,
+): profile is PersonalizationProfile {
+  return Boolean(
+    profile &&
+      (profile.preferredIngredients.length > 0 || profile.dislikedIngredients.length > 0),
+  );
+}
+
+function sortByIngredientPreferences(
+  items: MenuServing[],
+  profile: PersonalizationProfile,
+) {
+  return items
+    .map((item, index) => ({
+      item,
+      index,
+      score: ingredientPreferenceSortScore(item.meal.ingredients, profile),
+    }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.index - b.index;
+    })
+    .map(({ item }) => item);
+}
+
+function ingredientPreferenceSortScore(
+  ingredients: string[],
+  profile: PersonalizationProfile,
+) {
+  const normalizedIngredients = normalizeIngredientList(ingredients);
+  const preferredMatches = countPreferenceMatches(
+    normalizedIngredients,
+    profile.preferredIngredients,
+  );
+  const dislikedMatches = countPreferenceMatches(
+    normalizedIngredients,
+    profile.dislikedIngredients,
+  );
+
+  return (
+    Math.min(preferredMatches, PREFERRED_INGREDIENT_MATCH_CAP) *
+      PREFERRED_INGREDIENT_SORT_BOOST -
+    Math.min(dislikedMatches, DISLIKED_INGREDIENT_MATCH_CAP) *
+      DISLIKED_INGREDIENT_SORT_PENALTY
+  );
+}
+
+function countPreferenceMatches(ingredients: string[], preferences: string[]) {
+  if (preferences.length === 0) return 0;
+
+  return preferences.filter((preference) =>
+    ingredients.some((ingredient) => ingredientsMatchPreference(ingredient, preference)),
+  ).length;
+}
+
+function ingredientsMatchPreference(ingredient: string, preference: string) {
+  if (!ingredient || !preference) return false;
+  if (ingredient === preference) return true;
+  if (ingredient.includes(preference) || preference.includes(ingredient)) return true;
+  return new RegExp(`(^|\\s)${escapeRegExp(preference)}(\\s|$)`).test(ingredient);
+}
+
+function normalizeIngredientList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return [
+    ...new Set(
+      value
+        .filter((item): item is string => typeof item === "string")
+        .map(normalizeIngredientText)
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function normalizeIngredientText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
