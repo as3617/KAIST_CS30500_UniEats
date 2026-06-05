@@ -5,8 +5,6 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Bell,
-  BriefcaseBusiness,
-  CircleHelp,
   Home,
   LogIn,
   MapPinned,
@@ -31,14 +29,9 @@ const publicNavLinks: NavLink[] = [
   { href: "/search", icon: Search, label: "Search" },
   { href: "/campus-map", icon: MapPinned, label: "Map" },
 ];
-const managerNavLink: NavLink = { href: "/manager", icon: BriefcaseBusiness, label: "Manager" };
 const notificationsNavLink: NavLink = { href: "/notifications", icon: Bell, label: "Notifications" };
 const myPageNavLink: NavLink = { href: "/my-page", icon: User, label: "My Page" };
 const signInNavLink: NavLink = { href: "/login", icon: LogIn, label: "Sign in" };
-
-function canUseManager(user: Pick<AuthUser, "role"> | null) {
-  return user?.role === "MANAGER" || user?.role === "ADMIN";
-}
 
 export function TopHeader() {
   const pathname = usePathname();
@@ -53,7 +46,6 @@ export function TopHeader() {
 
   const navLinks: NavLink[] = [
     ...publicNavLinks,
-    ...(canUseManager(user) ? [managerNavLink] : []),
     ...(user ? [{ ...notificationsNavLink, badge: unreadCount }] : []),
     user ? myPageNavLink : signInNavLink,
   ];

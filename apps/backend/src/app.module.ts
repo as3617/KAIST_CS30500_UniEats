@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
 import { AnalyticsModule } from "./analytics/analytics.module";
+import { DiscountsModule } from "./discounts/discounts.module";
 import { AuthModule } from "./auth/auth.module";
 import { CafeteriaManagersModule } from "./cafeteria-managers/cafeteria-managers.module";
 import { CafeteriasModule } from "./cafeterias/cafeterias.module";
@@ -39,6 +40,7 @@ import { ViewHistoriesModule } from "./view-histories/view-histories.module";
     CafeteriaManagersModule,
     AnalyticsModule,
     NotificationsModule,
+    DiscountsModule,
   ],
 })
 export class AppModule {}

@@ -2,6 +2,7 @@
 // Next.js hot-module reloads in development without losing added entries.
 
 import type {
+  Discount,
   FavoriteMeal,
   Meal,
   MenuServing,
@@ -10,6 +11,7 @@ import type {
   Review,
 } from "@/types";
 import {
+  mockDiscounts,
   mockFavorites,
   mockMeals,
   mockMenuServings,
@@ -19,6 +21,8 @@ import {
 } from "./data";
 
 declare global {
+  // eslint-disable-next-line no-var
+  var __discountsStore: Discount[] | undefined;
   // eslint-disable-next-line no-var
   var __receiptsStore: Receipt[] | undefined;
   // eslint-disable-next-line no-var
@@ -33,6 +37,7 @@ declare global {
   var __favoritesStore: FavoriteMeal[] | undefined;
 }
 
+globalThis.__discountsStore ??= [...mockDiscounts];
 globalThis.__mealsStore ??= mockMeals.map((meal) => ({
   ...meal,
   ingredients: [...meal.ingredients],
@@ -55,6 +60,7 @@ globalThis.__favoritesStore ??= mockFavorites.map((favorite) => ({
   meal: favorite.meal ? { ...favorite.meal } : undefined,
 }));
 
+export const discountsStore: Discount[] = globalThis.__discountsStore;
 export const receiptsStore: Receipt[] = globalThis.__receiptsStore;
 export const reviewsStore: Review[] = globalThis.__reviewsStore;
 export const menuServingsStore: MenuServing[] = globalThis.__menuServingsStore;
