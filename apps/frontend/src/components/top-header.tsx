@@ -30,7 +30,6 @@ const publicNavLinks: NavLink[] = [
   { href: "/dashboard", icon: Home, label: "Home" },
   { href: "/search", icon: Search, label: "Search" },
   { href: "/campus-map", icon: MapPinned, label: "Map" },
-  { href: "/help", icon: CircleHelp, label: "Help" },
 ];
 const managerNavLink: NavLink = { href: "/manager", icon: BriefcaseBusiness, label: "Manager" };
 const notificationsNavLink: NavLink = { href: "/notifications", icon: Bell, label: "Notifications" };
@@ -60,7 +59,7 @@ export function TopHeader() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 bg-background border-b border-border">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background border-b border-border">
       <div className="flex items-center justify-between h-14 px-6 max-w-5xl mx-auto">
         <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold tracking-tight">
           <MapPinned className="h-5 w-5 text-primary" />

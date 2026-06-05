@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  BriefcaseBusiness,
   ChevronRight,
   Heart,
+  LogOut,
   Save,
   ShieldAlert,
   Star,
@@ -162,9 +165,12 @@ export function ProfileView() {
     <main className="container max-w-3xl space-y-6 py-8">
       <BackToDashboard />
 
-      <header className="space-y-2">
-        <p className="text-sm font-medium text-muted-foreground">My Page</p>
-        <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
+      <header className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">My Page</p>
+          <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
+        </div>
+        <SignOutButton />
       </header>
 
       <Card>
@@ -172,7 +178,22 @@ export function ProfileView() {
           <CardTitle>{profile.nickname}</CardTitle>
           <CardDescription>{profile.email}</CardDescription>
         </CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className="space-y-2 pt-0">
+          {(profile.role === "MANAGER" || profile.role === "ADMIN") && (
+            <Link
+              href="/manager"
+              className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:border-primary/60 hover:bg-primary/5"
+            >
+              <BriefcaseBusiness className="h-4 w-4 text-primary" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Manager Dashboard</p>
+                <p className="text-xs text-muted-foreground">
+                  {profile.role === "ADMIN" ? "Admin" : "Cafeteria manager"}
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </Link>
+          )}
           <Link
             href="/my-page/reviews"
             className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:border-primary/60 hover:bg-primary/5"
@@ -321,7 +342,26 @@ export function ProfileView() {
           </Button>
         </div>
       </form>
+
     </main>
+  );
+}
+
+function SignOutButton() {
+  const router = useRouter();
+
+  function handleSignOut() {
+    authStorage.clear();
+    router.push("/login");
+  }
+
+  return (
+    <div className="flex justify-center pb-4">
+      <Button variant="outline" size="sm" onClick={handleSignOut}>
+        <LogOut className="h-4 w-4" />
+        Sign out
+      </Button>
+    </div>
   );
 }
 
@@ -368,17 +408,12 @@ function FavoriteMealsCard({
             {favorites.map((favorite) => {
               const mealName = favorite.meal?.name ?? "Saved meal";
               return (
-                <li
-                  key={favorite.mealId}
-                  className="flex items-center gap-3 rounded-lg border px-4 py-3"
-                >
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <Link
-                      href={`/search?q=${encodeURIComponent(mealName)}`}
-                      className="font-medium hover:underline"
-                    >
-                      {mealName}
-                    </Link>
+                <li key={favorite.mealId} className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:border-primary/40">
+                  <Link
+                    href={`/search?q=${encodeURIComponent(mealName)}`}
+                    className="min-w-0 flex-1 space-y-1"
+                  >
+                    <p className="font-medium">{mealName}</p>
                     <p className="text-xs text-muted-foreground">
                       {favorite.meal
                         ? CATEGORY_LABELS[favorite.meal.category]
@@ -396,14 +431,15 @@ function FavoriteMealsCard({
                         ))}
                       </div>
                     ) : null}
-                  </div>
+                  </Link>
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="icon"
                     aria-label={`Remove ${mealName} from favorites`}
                     disabled={pendingMealIds.has(favorite.mealId)}
                     onClick={() => onRemove(favorite.mealId)}
+                    className="shrink-0 text-muted-foreground hover:text-destructive hover:border-destructive/50"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Bell, CircleHelp, Home, LogIn, MapPinned, Search, User } from "lucide-react";
+import { Bell, Home, LogIn, MapPinned, Search, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { authStorage } from "@/lib/auth-storage";
@@ -20,7 +20,6 @@ const publicTabs: Tab[] = [
   { href: "/campus-map", icon: MapPinned },
   { href: "/dashboard", icon: Home },
   { href: "/search", icon: Search },
-  { href: "/help", icon: CircleHelp },
 ];
 const notificationsTab: Tab = { href: "/notifications", icon: Bell };
 const myPageTab: Tab = { href: "/my-page", icon: User };
