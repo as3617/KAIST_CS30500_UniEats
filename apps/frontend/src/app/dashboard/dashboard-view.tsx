@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, Filter, Search, Trophy, X } from "lucide-react";
+import { BarChart3, CircleHelp, Filter, MessageCircle, Search, Trophy, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MenuServingCard } from "@/components/menu-serving-card";
+import { MenuServingCard, StarRating } from "@/components/menu-serving-card";
 import { ApiClientError, api } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
 import { todayInSeoul } from "@/lib/date";
@@ -174,12 +174,6 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
     };
   }, []);
 
-  function handleSignOut() {
-    authStorage.clear();
-    setUser(null);
-    setHideAllergyConflicts(false);
-  }
-
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSearchQuery(searchInput.trim());
@@ -222,20 +216,17 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
           <h1 className="text-3xl font-semibold tracking-tight">Cafeteria menu</h1>
         </div>
         <div className="flex items-center gap-2">
-          {user ? (
-            <>
-              <span className="text-sm text-muted-foreground">
-                Signed in as <span className="font-medium text-foreground">{user.nickname}</span>
-              </span>
-              <Button variant="outline" size="sm" onClick={handleSignOut}>
-                Sign out
-              </Button>
-            </>
-          ) : (
+          {!user && (
             <Button asChild size="sm">
               <Link href="/login">Sign in</Link>
             </Button>
           )}
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/help">
+              <CircleHelp className="h-4 w-4" />
+              Help
+            </Link>
+          </Button>
         </div>
       </header>
 
@@ -258,21 +249,25 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
             ) : (
               <ol className="space-y-3">
                 {weeklyBest.map((item, index) => (
-                  <li key={item.menuServingId} className="flex items-center gap-3">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                  <li key={item.menuServingId} className="relative flex items-center gap-3 rounded-lg px-2 py-1.5 -mx-2 hover:bg-muted/60 transition-colors">
+                    <Link href={`/menu-servings/${item.menuServingId}`} className="absolute inset-0 rounded-lg" aria-label={item.mealName} />
+                    <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
                       {index + 1}
                     </span>
-                    <div className="min-w-0 flex-1">
+                    <div className="relative min-w-0 flex-1">
+                      <p className="font-medium">{item.mealName}</p>
+                      <p className="text-xs text-muted-foreground">{item.cafeteriaName}</p>
                       <Link
-                        href={`/menu-servings/${item.menuServingId}`}
-                        className="font-medium hover:underline"
+                        href={`/menu-servings/${item.menuServingId}/reviews`}
+                        className="relative z-10 mt-1 flex items-center gap-1.5 w-fit rounded hover:bg-muted px-0.5"
                       >
-                        {item.mealName}
+                        <span className="text-xs font-medium">{item.averageRating.toFixed(1)}</span>
+                        <StarRating rating={item.averageRating} />
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <MessageCircle className="h-3 w-3" />
+                          {item.verifiedReviewCount}
+                        </span>
                       </Link>
-                      <p className="text-xs text-muted-foreground">
-                        {item.cafeteriaName} &middot; {item.averageRating.toFixed(1)} / 5 from{" "}
-                        {item.verifiedReviewCount} verified
-                      </p>
                     </div>
                   </li>
                 ))}
