@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Search, SlidersHorizontal, X } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 
 import { MenuServingCard } from "@/components/menu-serving-card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +52,8 @@ type SearchViewProps = {
   initialQuery?: string;
 };
 
+const SEARCH_RESULTS_LIMIT = 18;
+
 export function SearchView({ initialQuery = "" }: SearchViewProps) {
   const today = useMemo(() => todayInSeoul(), []);
   const normalizedInitialQuery = initialQuery.trim();
@@ -56,6 +65,7 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [searchInput, setSearchInput] = useState(normalizedInitialQuery);
   const [searchQuery, setSearchQuery] = useState(normalizedInitialQuery);
   const [date, setDate] = useState(today);
@@ -79,6 +89,13 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
       mealTime ||
       hideAllergyConflicts,
   );
+  const totalPages = Math.max(1, Math.ceil(total / SEARCH_RESULTS_LIMIT));
+  const pageNumbers = useMemo(
+    () => buildPageNumbers(currentPage, totalPages),
+    [currentPage, totalPages],
+  );
+  const firstVisibleItem = total === 0 ? 0 : (currentPage - 1) * SEARCH_RESULTS_LIMIT + 1;
+  const lastVisibleItem = Math.min(total, firstVisibleItem + items.length - 1);
 
   useEffect(() => {
     setUser(authStorage.getUser());
@@ -115,7 +132,8 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
           cafeteriaId: cafeteriaId || undefined,
           mealTime: mealTime || undefined,
           hideAllergyConflicts: hideAllergyConflicts ? "true" : undefined,
-          limit: 40,
+          page: currentPage,
+          limit: SEARCH_RESULTS_LIMIT,
         },
       });
       setItems(data.items);
@@ -125,7 +143,16 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [date, searchQuery, category, dietaryLabel, cafeteriaId, mealTime, hideAllergyConflicts]);
+  }, [
+    date,
+    searchQuery,
+    category,
+    dietaryLabel,
+    cafeteriaId,
+    mealTime,
+    hideAllergyConflicts,
+    currentPage,
+  ]);
 
   useEffect(() => {
     fetchResults();
@@ -139,10 +166,12 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
 
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setCurrentPage(1);
     setSearchQuery(searchInput.trim());
   }
 
   function resetFilters() {
+    setCurrentPage(1);
     setSearchInput("");
     setSearchQuery("");
     setDate(today);
@@ -225,7 +254,10 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
                   id="search-date"
                   type="date"
                   value={date}
-                  onChange={(event) => setDate(event.target.value)}
+                  onChange={(event) => {
+                    setCurrentPage(1);
+                    setDate(event.target.value);
+                  }}
                   className="pl-9"
                 />
               </div>
@@ -235,7 +267,10 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
               <select
                 id="search-cafeteria"
                 value={cafeteriaId}
-                onChange={(event) => setCafeteriaId(event.target.value)}
+                onChange={(event) => {
+                  setCurrentPage(1);
+                  setCafeteriaId(event.target.value);
+                }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="">All cafeterias</option>
@@ -251,7 +286,10 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
               <select
                 id="search-meal-time"
                 value={mealTime}
-                onChange={(event) => setMealTime(event.target.value as MealTime | "")}
+                onChange={(event) => {
+                  setCurrentPage(1);
+                  setMealTime(event.target.value as MealTime | "");
+                }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="">All times</option>
@@ -267,9 +305,10 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
               <select
                 id="search-dietary"
                 value={dietaryLabel}
-                onChange={(event) =>
-                  setDietaryLabel(event.target.value as DietaryLabelCode | "")
-                }
+                onChange={(event) => {
+                  setCurrentPage(1);
+                  setDietaryLabel(event.target.value as DietaryLabelCode | "");
+                }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="">Any option</option>
@@ -289,7 +328,10 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
                 type="button"
                 size="sm"
                 variant={category === "" ? "default" : "outline"}
-                onClick={() => setCategory("")}
+                onClick={() => {
+                  setCurrentPage(1);
+                  setCategory("");
+                }}
               >
                 All
               </Button>
@@ -299,7 +341,10 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
                   type="button"
                   size="sm"
                   variant={category === value ? "default" : "outline"}
-                  onClick={() => setCategory(value)}
+                  onClick={() => {
+                    setCurrentPage(1);
+                    setCategory(value);
+                  }}
                 >
                   {CATEGORY_LABELS[value]}
                 </Button>
@@ -311,7 +356,10 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
             <input
               type="checkbox"
               checked={hideAllergyConflicts}
-              onChange={(event) => setHideAllergyConflicts(event.target.checked)}
+              onChange={(event) => {
+                setCurrentPage(1);
+                setHideAllergyConflicts(event.target.checked);
+              }}
               disabled={!user}
               className="mt-0.5 h-4 w-4 rounded border-input"
             />
@@ -344,7 +392,7 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
       ) : (
         <section className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Showing {items.length} of {total} matching menu items
+            Showing {firstVisibleItem}-{lastVisibleItem} of {total} matching menu items
           </p>
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => (
@@ -358,8 +406,57 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
               </li>
             ))}
           </ul>
+          {totalPages > 1 ? (
+            <nav
+              aria-label="Search result page navigation"
+              className="flex flex-wrap items-center justify-center gap-2"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                aria-label="Previous search result page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              {pageNumbers.map((page) => (
+                <Button
+                  key={page}
+                  type="button"
+                  variant={page === currentPage ? "default" : "outline"}
+                  size="sm"
+                  className="h-9 min-w-9 px-3"
+                  onClick={() => setCurrentPage(page)}
+                  aria-current={page === currentPage ? "page" : undefined}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+                aria-label="Next search result page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </nav>
+          ) : null}
         </section>
       )}
     </main>
   );
+}
+
+function buildPageNumbers(currentPage: number, totalPages: number) {
+  if (totalPages <= 5) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const start = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+  return Array.from({ length: 5 }, (_, index) => start + index);
 }

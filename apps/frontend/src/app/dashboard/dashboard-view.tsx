@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, Filter, Search, Trophy, X } from "lucide-react";
+import { BarChart3, ChevronLeft, ChevronRight, Filter, Search, Trophy, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +48,8 @@ type DashboardViewProps = {
   initialCafeteriaId?: string;
 };
 
+const DASHBOARD_MENU_LIMIT = 20;
+
 export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
   const today = useMemo(() => todayInSeoul(), []);
   const [items, setItems] = useState<MenuServing[]>([]);
@@ -58,6 +60,7 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [weeklyBest, setWeeklyBest] = useState<WeeklyBestItem[]>([]);
   const [cafeteriaRanking, setCafeteriaRanking] = useState<CafeteriaRankItem[]>([]);
   const [isInsightsLoading, setIsInsightsLoading] = useState(true);
@@ -82,6 +85,13 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
       mealTime ||
       hideAllergyConflicts,
   );
+  const totalPages = Math.max(1, Math.ceil(total / DASHBOARD_MENU_LIMIT));
+  const pageNumbers = useMemo(
+    () => buildPageNumbers(currentPage, totalPages),
+    [currentPage, totalPages],
+  );
+  const firstVisibleItem = total === 0 ? 0 : (currentPage - 1) * DASHBOARD_MENU_LIMIT + 1;
+  const lastVisibleItem = Math.min(total, firstVisibleItem + items.length - 1);
 
   useEffect(() => {
     setUser(authStorage.getUser());
@@ -117,7 +127,8 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
           cafeteriaId: cafeteriaId || undefined,
           mealTime: mealTime || undefined,
           hideAllergyConflicts: hideAllergyConflicts ? "true" : undefined,
-          limit: 20,
+          page: currentPage,
+          limit: DASHBOARD_MENU_LIMIT,
         },
       });
       setItems(data.items);
@@ -131,7 +142,16 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [today, searchQuery, category, dietaryLabel, cafeteriaId, mealTime, hideAllergyConflicts]);
+  }, [
+    today,
+    searchQuery,
+    category,
+    dietaryLabel,
+    cafeteriaId,
+    mealTime,
+    hideAllergyConflicts,
+    currentPage,
+  ]);
 
   useEffect(() => {
     fetchMenu();
@@ -182,10 +202,12 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
 
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setCurrentPage(1);
     setSearchQuery(searchInput.trim());
   }
 
   function resetFilters() {
+    setCurrentPage(1);
     setSearchInput("");
     setSearchQuery("");
     setCategory("");
@@ -360,7 +382,10 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
               type="button"
               size="sm"
               variant={category === "" ? "default" : "outline"}
-              onClick={() => setCategory("")}
+              onClick={() => {
+                setCurrentPage(1);
+                setCategory("");
+              }}
             >
               All
             </Button>
@@ -370,7 +395,10 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
                 type="button"
                 size="sm"
                 variant={category === value ? "default" : "outline"}
-                onClick={() => setCategory(value)}
+                onClick={() => {
+                  setCurrentPage(1);
+                  setCategory(value);
+                }}
               >
                 {CATEGORY_LABELS[value]}
               </Button>
@@ -383,7 +411,10 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
               <select
                 id="cafeteria-filter"
                 value={cafeteriaId}
-                onChange={(event) => setCafeteriaId(event.target.value)}
+                onChange={(event) => {
+                  setCurrentPage(1);
+                  setCafeteriaId(event.target.value);
+                }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="">All cafeterias</option>
@@ -399,7 +430,10 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
               <select
                 id="meal-time-filter"
                 value={mealTime}
-                onChange={(event) => setMealTime(event.target.value as MealTime | "")}
+                onChange={(event) => {
+                  setCurrentPage(1);
+                  setMealTime(event.target.value as MealTime | "");
+                }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="">All times</option>
@@ -415,9 +449,10 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
               <select
                 id="dietary-filter"
                 value={dietaryLabel}
-                onChange={(event) =>
-                  setDietaryLabel(event.target.value as DietaryLabelCode | "")
-                }
+                onChange={(event) => {
+                  setCurrentPage(1);
+                  setDietaryLabel(event.target.value as DietaryLabelCode | "");
+                }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="">Any option</option>
@@ -435,7 +470,10 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
             <input
               type="checkbox"
               checked={hideAllergyConflicts}
-              onChange={(event) => setHideAllergyConflicts(event.target.checked)}
+              onChange={(event) => {
+                setCurrentPage(1);
+                setHideAllergyConflicts(event.target.checked);
+              }}
               disabled={!user}
               className="h-4 w-4 rounded border-input"
             />
@@ -472,7 +510,7 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
       ) : (
         <section className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Showing {items.length} of {total} available menu items
+            Showing {firstVisibleItem}-{lastVisibleItem} of {total} available menu items
           </p>
           <ul className="grid gap-4 sm:grid-cols-2">
             {items.map((item) => (
@@ -486,8 +524,57 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
               </li>
             ))}
           </ul>
+          {totalPages > 1 ? (
+            <nav
+              aria-label="Menu page navigation"
+              className="flex flex-wrap items-center justify-center gap-2"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                aria-label="Previous menu page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              {pageNumbers.map((page) => (
+                <Button
+                  key={page}
+                  type="button"
+                  variant={page === currentPage ? "default" : "outline"}
+                  size="sm"
+                  className="h-9 min-w-9 px-3"
+                  onClick={() => setCurrentPage(page)}
+                  aria-current={page === currentPage ? "page" : undefined}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+                aria-label="Next menu page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </nav>
+          ) : null}
         </section>
       )}
     </main>
   );
+}
+
+function buildPageNumbers(currentPage: number, totalPages: number) {
+  if (totalPages <= 5) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const start = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+  return Array.from({ length: 5 }, (_, index) => start + index);
 }

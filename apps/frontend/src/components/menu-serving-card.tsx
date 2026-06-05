@@ -21,6 +21,13 @@ import {
 } from "@/types";
 import type { MenuServing } from "@/types";
 
+const DAILY_MENU_TIME_LABELS: Record<MenuServing["mealTime"], string> = {
+  BREAKFAST: "조식",
+  LUNCH: "중식",
+  DINNER: "석식",
+  ALL_DAY: "상시",
+};
+
 type MenuServingCardProps = {
   serving: MenuServing;
   isFavorite?: boolean;
@@ -36,6 +43,8 @@ export function MenuServingCard({
 }: MenuServingCardProps) {
   const isSoldOut = serving.status === "SOLD_OUT";
   const hasAllergyConflict = serving.allergyWarning?.hasConflict ?? false;
+  const displayTitle = buildMenuServingCardTitle(serving);
+  const description = buildMenuServingCardDescription(serving);
 
   return (
     <Card className="h-full transition-colors hover:border-primary/40">
@@ -47,12 +56,10 @@ export function MenuServingCard({
                 href={`/menu-servings/${serving.id}`}
                 className="hover:underline"
               >
-                {serving.meal.name}
+                {displayTitle}
               </Link>
             </CardTitle>
-            <CardDescription>
-              {serving.cafeteria.name} &middot; {CATEGORY_LABELS[serving.meal.category]}
-            </CardDescription>
+            <CardDescription>{description}</CardDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Badge variant={isSoldOut ? "destructive" : "secondary"}>
@@ -99,4 +106,20 @@ export function MenuServingCard({
       </CardContent>
     </Card>
   );
+}
+
+function buildMenuServingCardTitle(serving: MenuServing) {
+  if (serving.source === "DAILY_MENU") {
+    return `${serving.cafeteria.name} - ${DAILY_MENU_TIME_LABELS[serving.mealTime]} - ${serving.date}`;
+  }
+
+  return serving.meal.name;
+}
+
+function buildMenuServingCardDescription(serving: MenuServing) {
+  if (serving.source === "DAILY_MENU") {
+    return CATEGORY_LABELS[serving.meal.category];
+  }
+
+  return `${serving.cafeteria.name} · ${CATEGORY_LABELS[serving.meal.category]}`;
 }

@@ -111,6 +111,7 @@ export type MenuServing = {
   mealTime: MealTime;
   price: number;
   status: MenuServingStatus;
+  source?: "DAILY_MENU" | "FIXED_MENU";
   stock?: number;
   averageRating: number;
   verifiedReviewCount: number;
