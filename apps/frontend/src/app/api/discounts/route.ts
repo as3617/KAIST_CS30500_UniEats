@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server";
 
 import { proxyToBackend, shouldUseMockApi } from "../_utils";
-import { authStorage } from "@/lib/auth-storage";
 import { discountsStore } from "@/mocks/store";
 import { okJson } from "@/mocks/respond";
 import type { Discount } from "@/types";
@@ -28,6 +27,10 @@ export async function POST(request: NextRequest) {
     cafeteriaName: body.cafeteriaName ?? "",
     menuName: body.menuName ?? "",
     discountedPrice: Number(body.discountedPrice ?? 0),
+    menuServingId:
+      typeof body.menuServingId === "string" && body.menuServingId.trim()
+        ? body.menuServingId.trim()
+        : null,
     validUntil: body.validUntil ?? new Date().toISOString(),
     isActive: body.isActive !== false,
     createdAt: new Date().toISOString(),

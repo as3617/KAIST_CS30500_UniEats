@@ -20,6 +20,11 @@ export interface DiscountWriteBody {
   isActive?: unknown;
 }
 
+type DiscountResponseSource = Partial<Discount> & {
+  _id: unknown;
+  createdAt?: unknown;
+};
+
 @Injectable()
 export class DiscountsService {
   constructor(
@@ -35,13 +40,13 @@ export class DiscountsService {
       .sort({ validUntil: 1 })
       .lean()
       .exec();
-    return items.map(this.toResponse);
+    return items.map((item) => this.toResponse(item));
   }
 
   async findAllAdmin(authorization: string | undefined) {
     await this.requireAdmin(authorization);
     const items = await this.discountModel.find().sort({ createdAt: -1 }).lean().exec();
-    return items.map(this.toResponse);
+    return items.map((item) => this.toResponse(item));
   }
 
   async create(authorization: string | undefined, body?: DiscountWriteBody) {
@@ -95,33 +100,51 @@ export class DiscountsService {
 
     if (body?.discountedPrice !== undefined || !partial) {
       const value = Number(body?.discountedPrice);
-      if (!partial && (body?.discountedPrice === undefined || isNaN(value) || value < 0)) {
+      if (body?.discountedPrice === undefined || isNaN(value) || value < 0) {
         throw new BadRequestException("discountedPrice must be a non-negative number");
       }
-      if (!isNaN(value) && value >= 0) result.discountedPrice = value;
+      result.discountedPrice = value;
     }
 
     if (body?.validUntil !== undefined || !partial) {
       const raw = body?.validUntil;
       const date = raw ? new Date(raw as string) : null;
-      if (!partial && (!date || isNaN(date.getTime()))) {
+      if (!date || isNaN(date.getTime())) {
         throw new BadRequestException("validUntil must be a valid date");
       }
-      if (date && !isNaN(date.getTime())) result.validUntil = date;
+      result.validUntil = date;
     }
 
     if (body?.menuServingId !== undefined) {
-      result.menuServingId = typeof body.menuServingId === "string" ? body.menuServingId.trim() || undefined : undefined;
+      if (body.menuServingId === null) {
+        result.menuServingId = undefined;
+      } else if (typeof body.menuServingId === "string") {
+        result.menuServingId = body.menuServingId.trim() || undefined;
+      } else {
+        throw new BadRequestException("menuServingId must be a string");
+      }
     }
 
     if (body?.isActive !== undefined) {
-      result.isActive = Boolean(body.isActive);
+      result.isActive = this.parseBoolean(body.isActive, "isActive");
     }
 
     return result;
   }
 
-  private toResponse(discount: Record<string, unknown> & { _id: unknown }) {
+  private parseBoolean(value: unknown, fieldName: string) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === "true") return true;
+      if (normalized === "false") return false;
+    }
+    throw new BadRequestException(`${fieldName} must be a boolean`);
+  }
+
+  private toResponse(discount: DiscountResponseSource) {
     return {
       id: String(discount._id),
       cafeteriaName: discount.cafeteriaName,

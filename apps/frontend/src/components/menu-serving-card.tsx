@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import type { KeyboardEvent } from "react";
 import { AlertTriangle, MessageCircle, Star } from "lucide-react";
 
 import { FavoriteMealButton } from "@/components/favorite-meal-button";
@@ -62,14 +64,33 @@ export function MenuServingCard({
   isFavoritePending = false,
   onToggleFavorite,
 }: MenuServingCardProps) {
+  const router = useRouter();
   const isSoldOut = serving.status === "SOLD_OUT";
   const hasAllergyConflict = serving.allergyWarning?.hasConflict ?? false;
   const displayTitle = buildMenuServingCardTitle(serving);
   const description = buildMenuServingCardDescription(serving);
+  const detailPath = `/menu-servings/${serving.id}`;
+
+  function openDetailPage() {
+    router.push(detailPath);
+  }
+
+  function handleCardKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openDetailPage();
+    }
+  }
 
   return (
-    <Link href={`/menu-servings/${serving.id}`} className="block h-full">
-    <Card className="h-full flex flex-col bg-card shadow-sm transition-colors hover:border-primary/40 cursor-pointer">
+    <Card
+      role="link"
+      tabIndex={0}
+      aria-label={displayTitle}
+      onClick={openDetailPage}
+      onKeyDown={handleCardKeyDown}
+      className="h-full flex flex-col bg-card shadow-sm transition-colors hover:border-primary/40 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       <CardHeader className="space-y-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
@@ -83,7 +104,10 @@ export function MenuServingCard({
               {isSoldOut ? "Sold out" : MEAL_TIME_LABELS[serving.mealTime]}
             </Badge>
             {onToggleFavorite ? (
-              <span onClick={(e) => e.preventDefault()}>
+              <span
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
                 <FavoriteMealButton
                   isFavorite={isFavorite}
                   isPending={isFavoritePending}
@@ -121,6 +145,7 @@ export function MenuServingCard({
           <Link
             href={`/menu-servings/${serving.id}/reviews`}
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
             className="flex items-center gap-2 rounded-md hover:bg-muted px-1 -mx-1 py-0.5"
           >
             <span className="text-xs font-medium">{serving.averageRating.toFixed(1)}</span>
@@ -135,7 +160,6 @@ export function MenuServingCard({
         </div>
       </CardContent>
     </Card>
-    </Link>
   );
 }
 
