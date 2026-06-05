@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   Bell,
   BriefcaseBusiness,
+  CircleHelp,
   Home,
   LogIn,
   MapPinned,
@@ -29,6 +30,7 @@ const publicNavLinks: NavLink[] = [
   { href: "/dashboard", icon: Home, label: "Home" },
   { href: "/search", icon: Search, label: "Search" },
   { href: "/campus-map", icon: MapPinned, label: "Map" },
+  { href: "/help", icon: CircleHelp, label: "Help" },
 ];
 const managerNavLink: NavLink = { href: "/manager", icon: BriefcaseBusiness, label: "Manager" };
 const notificationsNavLink: NavLink = { href: "/notifications", icon: Bell, label: "Notifications" };
