@@ -5,8 +5,6 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Bell,
-  BriefcaseBusiness,
-  CircleHelp,
   Home,
   LogIn,
   MapPinned,
@@ -30,16 +28,10 @@ const publicNavLinks: NavLink[] = [
   { href: "/dashboard", icon: Home, label: "Home" },
   { href: "/search", icon: Search, label: "Search" },
   { href: "/campus-map", icon: MapPinned, label: "Map" },
-  { href: "/help", icon: CircleHelp, label: "Help" },
 ];
-const managerNavLink: NavLink = { href: "/manager", icon: BriefcaseBusiness, label: "Manager" };
 const notificationsNavLink: NavLink = { href: "/notifications", icon: Bell, label: "Notifications" };
 const myPageNavLink: NavLink = { href: "/my-page", icon: User, label: "My Page" };
 const signInNavLink: NavLink = { href: "/login", icon: LogIn, label: "Sign in" };
-
-function canUseManager(user: Pick<AuthUser, "role"> | null) {
-  return user?.role === "MANAGER" || user?.role === "ADMIN";
-}
 
 export function TopHeader() {
   const pathname = usePathname();
@@ -54,13 +46,12 @@ export function TopHeader() {
 
   const navLinks: NavLink[] = [
     ...publicNavLinks,
-    ...(canUseManager(user) ? [managerNavLink] : []),
     ...(user ? [{ ...notificationsNavLink, badge: unreadCount }] : []),
     user ? myPageNavLink : signInNavLink,
   ];
 
   return (
-    <header className="sticky top-0 z-50 bg-background border-b border-border">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background border-b border-border">
       <div className="flex items-center justify-between h-14 px-6 max-w-5xl mx-auto">
         <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold tracking-tight">
           <MapPinned className="h-5 w-5 text-primary" />

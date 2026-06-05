@@ -217,6 +217,17 @@ export type CafeteriaRankItem = {
   rank: number;
 };
 
+export type Discount = {
+  id: string;
+  cafeteriaName: string;
+  menuName: string;
+  discountedPrice: number;
+  menuServingId: string | null;
+  validUntil: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
 export type Notification = {
   id: string;
   type: NotificationType;

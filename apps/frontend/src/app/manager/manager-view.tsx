@@ -6,9 +6,12 @@ import {
   BarChart3,
   CheckCircle2,
   MessageSquareReply,
+  Plus,
   PlusCircle,
   RefreshCw,
   ShieldCheck,
+  Tag,
+  Trash2,
   UtensilsCrossed,
 } from "lucide-react";
 
@@ -46,6 +49,7 @@ import type {
   AllergyCode,
   Cafeteria,
   CategoryCode,
+  Discount,
   DietaryLabelCode,
   Meal,
   MealTime,
@@ -123,6 +127,16 @@ export function ManagerView() {
   const [isSaving, setIsSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"operations" | "discounts">("operations");
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
+  const [discountForm, setDiscountForm] = useState({
+    cafeteriaName: "",
+    menuName: "",
+    discountedPrice: "",
+    menuServingId: "",
+    validUntil: "",
+  });
+  const [isDiscountSaving, setIsDiscountSaving] = useState(false);
 
   const selectedCafeteria = cafeterias.find(
     (cafeteria) => cafeteria.id === selectedCafeteriaId,
@@ -372,6 +386,60 @@ export function ManagerView() {
     }
   }
 
+  useEffect(() => {
+    if (user?.role !== "ADMIN") return;
+    api.get<Discount[]>("/discounts", { query: { admin: "true" } })
+      .then(setDiscounts)
+      .catch(() => setDiscounts([]));
+  }, [user?.role]);
+
+  async function createDiscount(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const price = Number(discountForm.discountedPrice);
+    if (!Number.isFinite(price) || price < 0) {
+      setError("Discounted price must be a non-negative number.");
+      return;
+    }
+    setIsDiscountSaving(true);
+    setError(null);
+    try {
+      const created = await api.post<Discount>("/discounts", {
+        cafeteriaName: discountForm.cafeteriaName,
+        menuName: discountForm.menuName,
+        discountedPrice: price,
+        menuServingId: discountForm.menuServingId.trim() || undefined,
+        validUntil: new Date(discountForm.validUntil).toISOString(),
+      });
+      setDiscounts((current) => [created, ...current]);
+      setDiscountForm({ cafeteriaName: "", menuName: "", discountedPrice: "", menuServingId: "", validUntil: "" });
+      setSuccess("Discount created.");
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to create discount");
+    } finally {
+      setIsDiscountSaving(false);
+    }
+  }
+
+  async function toggleDiscount(discount: Discount) {
+    try {
+      const updated = await api.patch<Discount>(`/discounts/${discount.id}`, {
+        isActive: !discount.isActive,
+      });
+      setDiscounts((current) => current.map((d) => (d.id === discount.id ? updated : d)));
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to update discount");
+    }
+  }
+
+  async function deleteDiscount(discountId: string) {
+    try {
+      await api.delete(`/discounts/${discountId}`);
+      setDiscounts((current) => current.filter((d) => d.id !== discountId));
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to delete discount");
+    }
+  }
+
   return (
     <main className="container max-w-6xl space-y-6 py-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -391,6 +459,34 @@ export function ManagerView() {
         </Button>
       </header>
 
+      {user?.role === "ADMIN" && (
+        <div className="flex gap-1 rounded-lg border bg-muted/40 p-1 w-fit">
+          <button
+            type="button"
+            onClick={() => setActiveTab("operations")}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeTab === "operations"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Cafeteria operations
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("discounts")}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeTab === "discounts"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Promotion management
+          </button>
+        </div>
+      )}
+
+      {(activeTab === "operations" || user?.role !== "ADMIN") && (<>
       {user?.role !== "MANAGER" && user?.role !== "ADMIN" ? (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="flex gap-3 p-4 text-sm">
@@ -519,6 +615,131 @@ export function ManagerView() {
             )}
           </section>
         </div>
+      )}
+      </>)}
+
+      {activeTab === "discounts" && user?.role === "ADMIN" && (
+        <section className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Add promotion</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={createDiscount} className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="d-cafeteria">Cafeteria name</Label>
+                  <Input
+                    id="d-cafeteria"
+                    value={discountForm.cafeteriaName}
+                    onChange={(e) => setDiscountForm((f) => ({ ...f, cafeteriaName: e.target.value }))}
+                    placeholder="West Cafeteria"
+                    required
+                    disabled={isDiscountSaving}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="d-menu">Menu name</Label>
+                  <Input
+                    id="d-menu"
+                    value={discountForm.menuName}
+                    onChange={(e) => setDiscountForm((f) => ({ ...f, menuName: e.target.value }))}
+                    placeholder="Bulgogi Rice Set"
+                    required
+                    disabled={isDiscountSaving}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="d-price">Promotional price (₩)</Label>
+                  <Input
+                    id="d-price"
+                    type="number"
+                    min={0}
+                    value={discountForm.discountedPrice}
+                    onChange={(e) => setDiscountForm((f) => ({ ...f, discountedPrice: e.target.value }))}
+                    placeholder="4500"
+                    required
+                    disabled={isDiscountSaving}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="d-serving">Menu Serving ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input
+                    id="d-serving"
+                    value={discountForm.menuServingId}
+                    onChange={(e) => setDiscountForm((f) => ({ ...f, menuServingId: e.target.value }))}
+                    placeholder="Paste from menu serving URL"
+                    disabled={isDiscountSaving}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="d-until">Valid until</Label>
+                  <Input
+                    id="d-until"
+                    type="date"
+                    value={discountForm.validUntil}
+                    onChange={(e) => setDiscountForm((f) => ({ ...f, validUntil: e.target.value }))}
+                    required
+                    disabled={isDiscountSaving}
+                  />
+                </div>
+                <div className="sm:col-span-2 flex justify-end">
+                  <Button type="submit" size="sm" disabled={isDiscountSaving}>
+                    <Plus className="h-4 w-4" />
+                    {isDiscountSaving ? "Adding..." : "Add promotion"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {discounts.length === 0 ? (
+            <div className="rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
+              No promotions yet.
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <ul className="divide-y">
+                  {discounts.map((discount) => (
+                    <li key={discount.id} className="flex items-center gap-3 px-4 py-3">
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <p className={`font-medium text-sm ${!discount.isActive ? "text-muted-foreground line-through" : ""}`}>
+                          {discount.menuName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {discount.cafeteriaName} &middot;{" "}
+                          {formatPriceKRW(discount.discountedPrice)} &middot; Until{" "}
+                          {new Date(discount.validUntil).toLocaleDateString("en", {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleDiscount(discount)}
+                        className="shrink-0 text-xs"
+                      >
+                        {discount.isActive ? "Deactivate" : "Activate"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => deleteDiscount(discount.id)}
+                        className="shrink-0 text-muted-foreground hover:text-destructive hover:border-destructive/50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </section>
       )}
     </main>
   );
