@@ -67,6 +67,11 @@ export function MenuServingCard({
   const router = useRouter();
   const isSoldOut = serving.status === "SOLD_OUT";
   const hasAllergyConflict = serving.allergyWarning?.hasConflict ?? false;
+  const activeDiscount =
+    serving.activeDiscount &&
+    serving.activeDiscount.discountedPrice < serving.price
+      ? serving.activeDiscount
+      : null;
   const displayTitle = buildMenuServingCardTitle(serving);
   const description = buildMenuServingCardDescription(serving);
   const detailPath = `/menu-servings/${serving.id}`;
@@ -100,6 +105,11 @@ export function MenuServingCard({
             <CardDescription>{description}</CardDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {activeDiscount ? (
+              <Badge variant="outline" className="border-primary/40 text-primary">
+                Promo
+              </Badge>
+            ) : null}
             <Badge variant={isSoldOut ? "destructive" : "secondary"}>
               {isSoldOut ? "Sold out" : MEAL_TIME_LABELS[serving.mealTime]}
             </Badge>
@@ -155,7 +165,18 @@ export function MenuServingCard({
               {serving.verifiedReviewCount}
             </span>
           </Link>
-          <span className="text-base font-bold">{formatPriceKRW(serving.price)}</span>
+          {activeDiscount ? (
+            <div className="flex flex-col items-end leading-tight">
+              <span className="text-base font-bold text-primary">
+                {formatPriceKRW(activeDiscount.discountedPrice)}
+              </span>
+              <span className="text-xs text-muted-foreground line-through">
+                {formatPriceKRW(serving.price)}
+              </span>
+            </div>
+          ) : (
+            <span className="text-base font-bold">{formatPriceKRW(serving.price)}</span>
+          )}
           </div>
         </div>
       </CardContent>
