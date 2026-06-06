@@ -128,21 +128,18 @@ export class ReceiptsService {
     }
     let matchedMenuServingIds: Types.ObjectId[] = [];
 
-    if (extractedDate) {
-      const servings = await this.findServingsByDate(extractedDate);
-      const result = matchMenu(text, servings, 0.5);
+    const result = await this.matchReceiptToServing(text, extractedDate);
 
-      if (result) {
-        const { match } = result;
-        parsed = {
-          ...parsed,
-          purchasedAt: new Date(extractedDate),
-          cafeteriaName: this.populatedName(match.cafeteriaId),
-          mealNames: [this.populatedName(match.mealId)],
-          totalPrice: match.price,
-        };
-        matchedMenuServingIds = [match._id as Types.ObjectId];
-      }
+    if (result) {
+      const { match } = result;
+      parsed = {
+        ...parsed,
+        purchasedAt: new Date(extractedDate ?? match.date),
+        cafeteriaName: this.populatedName(match.cafeteriaId),
+        mealNames: [this.populatedName(match.mealId)],
+        totalPrice: match.price,
+      };
+      matchedMenuServingIds = [match._id as Types.ObjectId];
     }
 
     if (matchedMenuServingIds.length === 0) {
@@ -391,24 +388,41 @@ export class ReceiptsService {
     return value.trim().slice(0, MAX_REJECT_REASON_LENGTH);
   }
 
+  private async matchReceiptToServing(rawText: string, extractedDate: string | null) {
+    if (extractedDate) {
+      const sameDateServings = await this.findServingsByDate(extractedDate);
+      const sameDateMatch = matchMenu(rawText, sameDateServings, 0.7);
+      if (sameDateMatch) {
+        return sameDateMatch;
+      }
+    }
+
+    const fallbackServings = await this.findOcrFallbackServings(extractedDate);
+    return matchMenu(rawText, fallbackServings, 0.82);
+  }
+
   private async findFakeOcrMatches() {
     const today = todayInSeoul();
-    let matches = await this.findServingsByDate(today);
+    let matches = await this.findServingsByDate(today, MAX_FAKE_OCR_MATCHES);
     if (matches.length === 0) {
       matches = await this.findRecentServings();
     }
     return matches;
   }
 
-  private findServingsByDate(date: string) {
-    return this.menuServingModel
+  private findServingsByDate(date: string, limit?: number) {
+    const query = this.menuServingModel
       .find({ date, status: { $ne: MenuServingStatus.HIDDEN } })
       .sort({ mealTime: 1, cafeteriaId: 1 })
-      .limit(MAX_FAKE_OCR_MATCHES)
       .populate({ path: "mealId", select: "name" })
       .populate({ path: "cafeteriaId", select: "name" })
-      .lean()
-      .exec();
+      .lean();
+
+    if (limit) {
+      query.limit(limit);
+    }
+
+    return query.exec();
   }
 
   private findRecentServings() {
@@ -416,6 +430,24 @@ export class ReceiptsService {
       .find({ status: { $ne: MenuServingStatus.HIDDEN } })
       .sort({ date: -1, mealTime: 1, cafeteriaId: 1 })
       .limit(MAX_FAKE_OCR_MATCHES)
+      .populate({ path: "mealId", select: "name" })
+      .populate({ path: "cafeteriaId", select: "name" })
+      .lean()
+      .exec();
+  }
+
+  private findOcrFallbackServings(excludedDate?: string | null) {
+    const filter: Record<string, unknown> = {
+      status: { $ne: MenuServingStatus.HIDDEN },
+    };
+    if (excludedDate) {
+      filter.date = { $ne: excludedDate };
+    }
+
+    return this.menuServingModel
+      .find(filter)
+      .sort({ date: -1, mealTime: 1, cafeteriaId: 1 })
+      .limit(250)
       .populate({ path: "mealId", select: "name" })
       .populate({ path: "cafeteriaId", select: "name" })
       .lean()

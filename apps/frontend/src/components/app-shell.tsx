@@ -18,7 +18,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <div className={showNav ? "pb-16 md:pb-0" : ""}>{children}</div>
+      <div className={showNav ? "pb-16 md:pb-0 md:pt-14" : ""}>{children}</div>
 
       {showNav && (
         <div className="md:hidden">

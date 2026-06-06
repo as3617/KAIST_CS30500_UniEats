@@ -1,5 +1,4 @@
 import * as stringSimilarity from 'string-similarity';
-import { MenuServing } from '../menu-servings/schemas/menu-serving.schema';
 
 /**
  * Extracts a date from OCR raw text. 
@@ -113,7 +112,117 @@ export function extractApprovalNumber(rawText: string): string | null {
  * Normalizes text for better fuzzy matching by removing all whitespace and standardizing casing.
  */
 function normalizeText(text: string): string {
-  return (text || '').replace(/\s+/g, '').toLowerCase();
+  return (text || '').replace(/[^0-9a-zA-Z가-힣]+/g, '').toLowerCase();
+}
+
+function readableIdentifier(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/[-_:]+/g, ' ') : '';
+}
+
+function identifierAliases(value: unknown): string[] {
+  const readable = readableIdentifier(value);
+  if (!readable) return [];
+
+  const tokens = readable.split(/\s+/).filter((token) => token.length > 1);
+  const aliases = new Set<string>([readable]);
+
+  for (let index = 1; index < tokens.length - 1; index += 1) {
+    aliases.add(tokens.slice(index).join(' '));
+  }
+
+  return [...aliases];
+}
+
+function populatedName(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && 'name' in value) {
+    const name = (value as { name?: unknown }).name;
+    return typeof name === 'string' ? name : '';
+  }
+  return '';
+}
+
+function bestSubstringScore(rawText: string, candidateText: string): number {
+  const normalizedRaw = normalizeText(rawText);
+  const normalizedCandidate = normalizeText(candidateText);
+
+  if (!normalizedRaw || !normalizedCandidate) {
+    return 0;
+  }
+
+  if (normalizedRaw.includes(normalizedCandidate)) {
+    return 1;
+  }
+
+  if (normalizedCandidate.length <= 2) {
+    return 0;
+  }
+
+  const windowSize = normalizedCandidate.length;
+  let bestScore = 0;
+  for (let i = 0; i <= normalizedRaw.length - windowSize; i++) {
+    const windowText = normalizedRaw.substring(i, i + windowSize);
+    const score = stringSimilarity.compareTwoStrings(windowText, normalizedCandidate);
+    if (score > bestScore) {
+      bestScore = score;
+    }
+  }
+
+  return bestScore;
+}
+
+function bestTextScore(rawText: string, candidateTexts: string[]): number {
+  return candidateTexts.reduce(
+    (bestScore, candidateText) => Math.max(bestScore, bestSubstringScore(rawText, candidateText)),
+    0,
+  );
+}
+
+export function extractPrices(rawText: string): number[] {
+  const prices = new Set<number>();
+  const normalized = (rawText || '').replace(/,/g, '');
+  const regex = /(?:₩|w|krw)?\s*([1-9]\d{2,5})(?!\d)/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(normalized)) !== null) {
+    const value = Number(match[1]);
+    if (Number.isInteger(value) && value >= 300 && value <= 200000) {
+      prices.add(value);
+    }
+  }
+
+  return [...prices];
+}
+
+function scoreServing(rawText: string, prices: number[], serving: any) {
+  const mealName = populatedName(serving.mealId);
+  const cafeteriaName = populatedName(serving.cafeteriaId);
+  const menuScore = bestTextScore(rawText, [
+    mealName,
+    ...identifierAliases(serving.sourceExternalKey),
+  ]);
+  const cafeteriaScore = bestTextScore(rawText, [cafeteriaName]);
+  const priceScore =
+    typeof serving.price === 'number' && prices.includes(serving.price) ? 1 : 0;
+
+  let score = menuScore * 0.65 + cafeteriaScore * 0.2 + priceScore * 0.15;
+
+  if (menuScore >= 0.92) {
+    score = Math.max(score, 0.82 + cafeteriaScore * 0.08 + priceScore * 0.1);
+  }
+  if (menuScore >= 0.72 && cafeteriaScore >= 0.65) {
+    score = Math.max(score, 0.78 + priceScore * 0.08);
+  }
+  if (cafeteriaScore >= 0.82 && priceScore === 1) {
+    score = Math.max(score, 0.72 + menuScore * 0.1);
+  }
+
+  return {
+    score: Math.min(score, 1),
+    menuScore,
+    cafeteriaScore,
+    priceScore,
+  };
 }
 
 /**
@@ -124,52 +233,31 @@ function normalizeText(text: string): string {
 export function matchMenu(
   rawText: string,
   servings: any[],
-  threshold = 0.5
+  threshold = 0.7
 ): { match: any; score: number } | null {
   if (!rawText || !servings || servings.length === 0) {
     return null;
   }
 
-  const normalizedRaw = normalizeText(rawText);
-
-  let bestMatch: any = null;
-  let highestScore = 0;
+  const candidates: Array<{ match: any; score: number }> = [];
+  const prices = extractPrices(rawText);
 
   for (const serving of servings) {
-    // Assuming populatedName has already been called or mealId has name populated
-    const mealName = typeof serving.mealId === 'object' ? serving.mealId.name : serving.mealId;
-    if (!mealName) continue;
-
-    const normalizedMenu = normalizeText(mealName);
-
-    // If the receipt contains the exact normalized menu name, it's a perfect match
-    if (normalizedRaw.includes(normalizedMenu)) {
-      return { match: serving, score: 1.0 };
-    }
-
-    // Otherwise, we break the raw text into chunks (the size of the menu name)
-    // and slide across the receipt text to find the highest similarity substring.
-    // This is because comparing a short menu name to a massive receipt string directly yields a low score.
-    const windowSize = normalizedMenu.length;
-    let localBestScore = 0;
-
-    for (let i = 0; i <= normalizedRaw.length - windowSize; i++) {
-      const windowText = normalizedRaw.substring(i, i + windowSize);
-      const score = stringSimilarity.compareTwoStrings(windowText, normalizedMenu);
-      if (score > localBestScore) {
-        localBestScore = score;
-      }
-    }
-
-    if (localBestScore > highestScore) {
-      highestScore = localBestScore;
-      bestMatch = serving;
-    }
+    const { score } = scoreServing(rawText, prices, serving);
+    candidates.push({ match: serving, score });
   }
 
-  if (highestScore >= threshold && bestMatch) {
-    return { match: bestMatch, score: highestScore };
+  candidates.sort((left, right) => right.score - left.score);
+  const best = candidates[0];
+  const second = candidates[1];
+
+  if (!best || best.score < threshold) {
+    return null;
   }
 
-  return null;
+  if (second && best.score < 0.9 && second.score >= best.score - 0.03) {
+    return null;
+  }
+
+  return best;
 }

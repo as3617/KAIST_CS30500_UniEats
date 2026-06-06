@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import type { KeyboardEvent } from "react";
+import { AlertTriangle, MessageCircle, Star } from "lucide-react";
 
 import { FavoriteMealButton } from "@/components/favorite-meal-button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +23,34 @@ import {
 } from "@/types";
 import type { MenuServing } from "@/types";
 
+const DAILY_MENU_TIME_LABELS: Record<MenuServing["mealTime"], string> = {
+  BREAKFAST: "조식",
+  LUNCH: "중식",
+  DINNER: "석식",
+  ALL_DAY: "상시",
+};
+
+export function StarRating({ rating }: { rating: number }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const fill = Math.min(1, Math.max(0, rating - (star - 1)));
+        return (
+          <span key={star} className="relative inline-block h-3.5 w-3.5">
+            <Star className="absolute h-3.5 w-3.5 fill-muted text-muted-foreground/30" />
+            <span
+              className="absolute inset-0 overflow-hidden"
+              style={{ width: `${fill * 100}%` }}
+            >
+              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 type MenuServingCardProps = {
   serving: MenuServing;
   isFavorite?: boolean;
@@ -34,47 +64,61 @@ export function MenuServingCard({
   isFavoritePending = false,
   onToggleFavorite,
 }: MenuServingCardProps) {
+  const router = useRouter();
   const isSoldOut = serving.status === "SOLD_OUT";
   const hasAllergyConflict = serving.allergyWarning?.hasConflict ?? false;
+  const displayTitle = buildMenuServingCardTitle(serving);
+  const description = buildMenuServingCardDescription(serving);
+  const detailPath = `/menu-servings/${serving.id}`;
+
+  function openDetailPage() {
+    router.push(detailPath);
+  }
+
+  function handleCardKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openDetailPage();
+    }
+  }
 
   return (
-    <Card className="h-full transition-colors hover:border-primary/40">
+    <Card
+      role="link"
+      tabIndex={0}
+      aria-label={displayTitle}
+      onClick={openDetailPage}
+      onKeyDown={handleCardKeyDown}
+      className="h-full flex flex-col bg-card shadow-sm transition-colors hover:border-primary/40 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       <CardHeader className="space-y-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
             <CardTitle className="text-lg leading-tight">
-              <Link
-                href={`/menu-servings/${serving.id}`}
-                className="hover:underline"
-              >
-                {serving.meal.name}
-              </Link>
+              {displayTitle}
             </CardTitle>
-            <CardDescription>
-              {serving.cafeteria.name} &middot; {CATEGORY_LABELS[serving.meal.category]}
-            </CardDescription>
+            <CardDescription>{description}</CardDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Badge variant={isSoldOut ? "destructive" : "secondary"}>
               {isSoldOut ? "Sold out" : MEAL_TIME_LABELS[serving.mealTime]}
             </Badge>
             {onToggleFavorite ? (
-              <FavoriteMealButton
-                isFavorite={isFavorite}
-                isPending={isFavoritePending}
-                onToggle={() => onToggleFavorite(serving)}
-              />
+              <span
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <FavoriteMealButton
+                  isFavorite={isFavorite}
+                  isPending={isFavoritePending}
+                  onToggle={() => onToggleFavorite(serving)}
+                />
+              </span>
             ) : null}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <div className="flex items-center justify-between">
-          <span className="font-medium">{formatPriceKRW(serving.price)}</span>
-          <span className="text-muted-foreground">
-            {serving.averageRating.toFixed(1)} / 5 ({serving.verifiedReviewCount})
-          </span>
-        </div>
+      <CardContent className="flex flex-1 flex-col gap-3 text-sm">
         {hasAllergyConflict ? (
           <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-destructive">
             <AlertTriangle className="mt-0.5 h-4 w-4" />
@@ -89,14 +133,48 @@ export function MenuServingCard({
             </div>
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-1">
-          {serving.meal.dietaryLabels.map((label) => (
-            <Badge key={label} variant="outline" className="text-xs">
-              {DIETARY_LABELS[label]}
-            </Badge>
-          ))}
+        <div className="mt-auto space-y-3">
+          <div className="flex flex-wrap gap-1">
+            {serving.meal.dietaryLabels.map((label) => (
+              <Badge key={label} variant="outline" className="text-xs">
+                {DIETARY_LABELS[label]}
+              </Badge>
+            ))}
+          </div>
+          <div className="border-t pt-3 flex items-center justify-between">
+          <Link
+            href={`/menu-servings/${serving.id}/reviews`}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            className="flex items-center gap-2 rounded-md hover:bg-muted px-1 -mx-1 py-0.5"
+          >
+            <span className="text-xs font-medium">{serving.averageRating.toFixed(1)}</span>
+            <StarRating rating={serving.averageRating} />
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <MessageCircle className="h-3.5 w-3.5" />
+              {serving.verifiedReviewCount}
+            </span>
+          </Link>
+          <span className="text-base font-bold">{formatPriceKRW(serving.price)}</span>
+          </div>
         </div>
       </CardContent>
     </Card>
   );
+}
+
+function buildMenuServingCardTitle(serving: MenuServing) {
+  if (serving.source === "DAILY_MENU") {
+    return `${serving.cafeteria.name} - ${DAILY_MENU_TIME_LABELS[serving.mealTime]} - ${serving.date}`;
+  }
+
+  return serving.meal.name;
+}
+
+function buildMenuServingCardDescription(serving: MenuServing) {
+  if (serving.source === "DAILY_MENU") {
+    return CATEGORY_LABELS[serving.meal.category];
+  }
+
+  return `${serving.cafeteria.name} · ${CATEGORY_LABELS[serving.meal.category]}`;
 }

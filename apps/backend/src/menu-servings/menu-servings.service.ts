@@ -742,6 +742,7 @@ export class MenuServingsService {
       price: serving.price,
       status: serving.status,
       stock: serving.stock,
+      source: serving.source,
       averageRating: serving.averageRating,
       verifiedReviewCount: serving.verifiedReviewCount,
       cafeteria: this.toCafeteriaSummary(cafeteria),

@@ -111,6 +111,7 @@ export type MenuServing = {
   mealTime: MealTime;
   price: number;
   status: MenuServingStatus;
+  source?: "DAILY_MENU" | "FIXED_MENU";
   stock?: number;
   averageRating: number;
   verifiedReviewCount: number;
@@ -214,6 +215,17 @@ export type CafeteriaRankItem = {
   verifiedReviewCount: number;
   positiveReviewCount: number;
   rank: number;
+};
+
+export type Discount = {
+  id: string;
+  cafeteriaName: string;
+  menuName: string;
+  discountedPrice: number;
+  menuServingId: string | null;
+  validUntil: string;
+  isActive: boolean;
+  createdAt: string;
 };
 
 export type Notification = {

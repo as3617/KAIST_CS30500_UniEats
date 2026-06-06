@@ -3,6 +3,7 @@
 
 import type {
   Cafeteria,
+  Discount,
   FavoriteMeal,
   Meal,
   MenuServing,
@@ -484,3 +485,26 @@ function pickFavoriteMeal(id: string): FavoriteMeal["meal"] {
     allergens: meal.allergens,
   };
 }
+
+export const mockDiscounts: Discount[] = [
+  {
+    id: "d1",
+    cafeteriaName: "West Cafeteria",
+    menuName: "Bulgogi Rice Set",
+    discountedPrice: 4500,
+    menuServingId: "ms1",
+    validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "d2",
+    cafeteriaName: "East Cafeteria",
+    menuName: "Kimchi Jjigae",
+    discountedPrice: 3800,
+    menuServingId: "ms2",
+    validUntil: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+];
