@@ -33,6 +33,7 @@ import { parsePagination } from "../common/pagination";
 import { Favorite } from "../favorites/schemas/favorite.schema";
 import { Meal } from "../meals/schemas/meal.schema";
 import { NotificationsService } from "../notifications/notifications.service";
+import { Discount } from "../discounts/schemas/discount.schema";
 import { User } from "../users/schemas/user.schema";
 import { MenuServingEventsService } from "./menu-serving-events.service";
 import { MenuServing } from "./schemas/menu-serving.schema";
@@ -110,6 +111,8 @@ export class MenuServingsService {
     private readonly cafeteriaManagerModel: Model<CafeteriaManager>,
     @InjectModel(Favorite.name)
     private readonly favoriteModel: Model<Favorite>,
+    @InjectModel(Discount.name)
+    private readonly discountModel: Model<Discount>,
     private readonly authService: AuthService,
     private readonly menuServingEventsService: MenuServingEventsService,
     private readonly notificationsService: NotificationsService,
@@ -147,11 +150,17 @@ export class MenuServingsService {
         this.menuServingModel.countDocuments(filter).exec(),
       ]);
       const rankedItems = this.sortByIngredientPreferences(items, viewerProfile);
+      const pagedItems = rankedItems.slice(skip, skip + limit);
+      const activeDiscounts = await this.findActiveDiscountsByServingId(pagedItems);
 
       return {
-        items: rankedItems
-          .slice(skip, skip + limit)
-          .map((serving) => this.toResponse(serving, viewerAllergies)),
+        items: pagedItems.map((serving) =>
+          this.toResponse(
+            serving,
+            viewerAllergies,
+            activeDiscounts.get(serving._id.toString()),
+          ),
+        ),
         page,
         limit,
         total,
@@ -176,9 +185,16 @@ export class MenuServingsService {
         .exec(),
       this.menuServingModel.countDocuments(filter).exec(),
     ]);
+    const activeDiscounts = await this.findActiveDiscountsByServingId(items);
 
     return {
-      items: items.map((serving) => this.toResponse(serving, viewerAllergies)),
+      items: items.map((serving) =>
+        this.toResponse(
+          serving,
+          viewerAllergies,
+          activeDiscounts.get(serving._id.toString()),
+        ),
+      ),
       page,
       limit,
       total,
@@ -207,7 +223,12 @@ export class MenuServingsService {
       throw new NotFoundException("menu serving not found");
     }
 
-    return this.toResponse(serving, viewerAllergies);
+    const activeDiscounts = await this.findActiveDiscountsByServingId([serving]);
+    return this.toResponse(
+      serving,
+      viewerAllergies,
+      activeDiscounts.get(serving._id.toString()),
+    );
   }
 
   async create(authorization: string | undefined, body?: MenuServingCreateBody) {
@@ -732,7 +753,48 @@ export class MenuServingsService {
     return value;
   }
 
-  private toResponse(serving: any, viewerAllergies: AllergyCode[] | null) {
+  private async findActiveDiscountsByServingId(servings: Array<{ _id: unknown }>) {
+    const servingIds = servings
+      .map((serving) => this.objectIdFromPopulated(serving._id))
+      .filter((servingId): servingId is Types.ObjectId => Boolean(servingId));
+
+    if (servingIds.length === 0) {
+      return new Map<string, Record<string, unknown>>();
+    }
+
+    const discounts = await this.discountModel
+      .find({
+        menuServingId: { $in: servingIds },
+        isActive: true,
+        validUntil: { $gte: new Date() },
+      })
+      .sort({ discountedPrice: 1, validUntil: 1 })
+      .lean()
+      .exec();
+    const discountByServingId = new Map<string, Record<string, unknown>>();
+
+    for (const discount of discounts) {
+      const servingId = this.objectIdFromPopulated(discount.menuServingId);
+      if (!servingId) continue;
+
+      const key = servingId.toString();
+      if (discountByServingId.has(key)) continue;
+
+      discountByServingId.set(key, {
+        id: discount._id.toString(),
+        discountedPrice: discount.discountedPrice,
+        validUntil: discount.validUntil,
+      });
+    }
+
+    return discountByServingId;
+  }
+
+  private toResponse(
+    serving: any,
+    viewerAllergies: AllergyCode[] | null,
+    activeDiscount?: Record<string, unknown>,
+  ) {
     const meal = serving.mealId;
     const cafeteria = serving.cafeteriaId;
     const response: Record<string, unknown> = {
@@ -748,6 +810,10 @@ export class MenuServingsService {
       cafeteria: this.toCafeteriaSummary(cafeteria),
       meal: this.toMealSummary(meal),
     };
+
+    if (activeDiscount) {
+      response.activeDiscount = activeDiscount;
+    }
 
     if (viewerAllergies) {
       response.allergyWarning = this.buildAllergyWarning(meal, viewerAllergies);

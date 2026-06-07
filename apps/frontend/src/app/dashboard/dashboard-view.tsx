@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, ChevronLeft, ChevronRight, CircleHelp, Filter, MessageCircle, Search, Tag, Trophy, X } from "lucide-react";
+import { BarChart3, ChevronLeft, ChevronRight, CircleHelp, Filter, MessageCircle, Search, Trophy, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { MenuServingCard, StarRating } from "@/components/menu-serving-card";
 import { ApiClientError, api } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
-import { formatPriceKRW, todayInSeoul } from "@/lib/date";
+import { todayInSeoul } from "@/lib/date";
 import { useFavoriteMeals } from "@/lib/use-favorite-meals";
 import {
   applyMenuServingStatusUpdate,
@@ -35,7 +35,6 @@ import {
 import type {
   Cafeteria,
   CategoryCode,
-  Discount,
   DietaryLabelCode,
   MealTime,
   MenuServing,
@@ -64,7 +63,6 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [weeklyBest, setWeeklyBest] = useState<WeeklyBestItem[]>([]);
   const [cafeteriaRanking, setCafeteriaRanking] = useState<CafeteriaRankItem[]>([]);
-  const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [isInsightsLoading, setIsInsightsLoading] = useState(true);
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [searchInput, setSearchInput] = useState("");
@@ -176,19 +174,16 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
       api.get<CafeteriaRankItem[]>("/analytics/cafeteria-ranking", {
         query: { limit: 3 },
       }),
-      api.get<Discount[]>("/discounts"),
     ])
-      .then(([bestItems, rankings, discountItems]) => {
+      .then(([bestItems, rankings]) => {
         if (!isCurrent) return;
         setWeeklyBest(bestItems);
         setCafeteriaRanking(rankings);
-        setDiscounts(discountItems);
       })
       .catch(() => {
         if (!isCurrent) return;
         setWeeklyBest([]);
         setCafeteriaRanking([]);
-        setDiscounts([]);
       })
       .finally(() => {
         if (isCurrent) setIsInsightsLoading(false);
@@ -344,44 +339,6 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
           </CardContent>
         </Card>
       </section>
-
-      {discounts.length > 0 && (
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-            <div className="space-y-1">
-              <CardTitle className="text-base">Ongoing Promotions</CardTitle>
-              <CardDescription>Special prices available right now.</CardDescription>
-            </div>
-            <Tag className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3">
-              {discounts.map((discount) => (
-                <li key={discount.id}>
-                  <Link
-                    href={discount.menuServingId ? `/menu-servings/${discount.menuServingId}` : `/search?q=${encodeURIComponent(discount.menuName)}`}
-                    className="flex items-center justify-between gap-3 rounded-lg border px-4 py-3 transition-colors hover:border-primary/40"
-                  >
-                    <div className="min-w-0 space-y-0.5">
-                      <p className="font-medium">{discount.menuName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {discount.cafeteriaName} &middot; Until{" "}
-                        {new Date(discount.validUntil).toLocaleDateString("en", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-base font-bold text-primary">
-                      {formatPriceKRW(discount.discountedPrice)}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">

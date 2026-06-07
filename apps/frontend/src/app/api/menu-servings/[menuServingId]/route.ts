@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 
 import { proxyToBackend, shouldUseMockApi } from "../../_utils";
 import { mockCafeterias, mockUser } from "@/mocks/data";
-import { mealsStore, menuServingsStore } from "@/mocks/store";
+import { discountsStore, mealsStore, menuServingsStore } from "@/mocks/store";
 import { errorJson, okJson } from "@/mocks/respond";
 import type { AllergyCode, MenuServingDetail } from "@/types";
 
@@ -40,6 +40,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const detail: MenuServingDetail = {
     ...serving,
+    activeDiscount: findActiveDiscountForServing(serving.id),
     cafeteria,
     meal,
     allergyWarning: isAuthenticated
@@ -51,4 +52,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   };
 
   return okJson(detail);
+}
+
+function findActiveDiscountForServing(menuServingId: string) {
+  const now = new Date().toISOString();
+  const discount = discountsStore
+    .filter(
+      (item) =>
+        item.isActive &&
+        item.menuServingId === menuServingId &&
+        item.validUntil >= now,
+    )
+    .sort((a, b) => {
+      if (a.discountedPrice !== b.discountedPrice) {
+        return a.discountedPrice - b.discountedPrice;
+      }
+      return a.validUntil.localeCompare(b.validUntil);
+    })[0];
+
+  return discount
+    ? {
+        id: discount.id,
+        discountedPrice: discount.discountedPrice,
+        validUntil: discount.validUntil,
+      }
+    : undefined;
 }

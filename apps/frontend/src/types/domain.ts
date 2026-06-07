@@ -110,6 +110,11 @@ export type MenuServing = {
   date: string;
   mealTime: MealTime;
   price: number;
+  activeDiscount?: {
+    id: string;
+    discountedPrice: number;
+    validUntil: string;
+  };
   status: MenuServingStatus;
   source?: "DAILY_MENU" | "FIXED_MENU";
   stock?: number;
@@ -219,6 +224,7 @@ export type CafeteriaRankItem = {
 
 export type Discount = {
   id: string;
+  cafeteriaId: string | null;
   cafeteriaName: string;
   menuName: string;
   discountedPrice: number;
