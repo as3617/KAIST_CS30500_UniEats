@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -205,10 +204,6 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
         <div className="space-y-2">
           <p className="text-sm font-medium text-muted-foreground">Search</p>
           <h1 className="text-3xl font-semibold tracking-tight">Find campus meals</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Search by meal, ingredient, or cafeteria, then narrow results with cuisine,
-            dining hall, meal time, and dietary filters.
-          </p>
         </div>
         {hasActiveFilters ? (
           <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
@@ -222,9 +217,6 @@ export function SearchView({ initialQuery = "" }: SearchViewProps) {
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div className="space-y-1">
             <CardTitle className="text-base">Search filters</CardTitle>
-            <CardDescription>
-              Combine text search with structured meal and cafeteria filters.
-            </CardDescription>
           </div>
           <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
         </CardHeader>

@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -262,9 +261,6 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
           <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
             <div className="space-y-1">
               <CardTitle className="text-base">Weekly Best</CardTitle>
-              <CardDescription>
-                Top meals weighted by rating and verified review volume.
-              </CardDescription>
             </div>
             <Trophy className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -277,7 +273,9 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
               <ol className="space-y-3">
                 {weeklyBest.map((item, index) => (
                   <li key={item.menuServingId} className="relative flex items-center gap-3 rounded-lg px-2 py-1.5 -mx-2 hover:bg-muted/60 transition-colors">
-                    <Link href={`/menu-servings/${item.menuServingId}`} className="absolute inset-0 rounded-lg" aria-label={item.mealName} />
+                    {item.menuServingId && (
+                      <Link href={`/menu-servings/${item.menuServingId}`} className="absolute inset-0 rounded-lg" aria-label={item.mealName} />
+                    )}
                     <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
                       {index + 1}
                     </span>
@@ -307,7 +305,6 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
           <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
             <div className="space-y-1">
               <CardTitle className="text-base">Cafeteria ranking</CardTitle>
-              <CardDescription>Verified satisfaction by dining hall.</CardDescription>
             </div>
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -350,7 +347,6 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
           <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
             <div className="space-y-1">
               <CardTitle className="text-base">Ongoing Promotions</CardTitle>
-              <CardDescription>Special prices available right now.</CardDescription>
             </div>
             <Tag className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -387,9 +383,6 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
         <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
           <div className="space-y-1">
             <CardTitle className="text-base">Find a meal</CardTitle>
-            <CardDescription>
-              Search today&apos;s menus by category, cafeteria, or dietary option.
-            </CardDescription>
           </div>
           <Button asChild variant="ghost" size="sm">
             <Link href="/search">

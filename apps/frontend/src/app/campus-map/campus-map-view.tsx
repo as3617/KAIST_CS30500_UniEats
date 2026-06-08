@@ -277,9 +277,6 @@ export function CampusMapView({ kakaoMapAppKey }: CampusMapViewProps) {
       <header className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">Explore campus</p>
         <h1 className="text-3xl font-semibold tracking-tight">Cafeteria map</h1>
-        <p className="text-sm text-muted-foreground">
-          Select a marker to check the dining hall location and today&apos;s operating hours.
-        </p>
       </header>
 
       {error ? (
@@ -300,9 +297,6 @@ export function CampusMapView({ kakaoMapAppKey }: CampusMapViewProps) {
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <CardTitle className="text-base">KAIST campus dining map</CardTitle>
-                  <CardDescription>
-                    Locations are plotted with Kakao Maps from cafeteria coordinates.
-                  </CardDescription>
                 </div>
                 <Badge variant={mapStatus === "ready" ? "secondary" : "outline"}>
                   {mapStatusLabel}
@@ -615,13 +609,38 @@ function buildPinPositions(cafeterias: Cafeteria[]) {
   const latSpan = maxLat - minLat || 0.001;
   const lngSpan = maxLng - minLng || 0.001;
 
-  positioned.forEach((cafeteria, index) => {
+  // Group cafeterias that map to the same pixel position (within 1% of the span)
+  const CLUSTER_THRESHOLD_PCT = 0.02;
+  const clusterGroups = new Map<string, string[]>();
+  positioned.forEach((cafeteria) => {
+    const normLng = (cafeteria.location.lng! - minLng) / lngSpan;
+    const normLat = (cafeteria.location.lat! - minLat) / latSpan;
+    const key = `${Math.round(normLng / CLUSTER_THRESHOLD_PCT)},${Math.round(normLat / CLUSTER_THRESHOLD_PCT)}`;
+    if (!clusterGroups.has(key)) clusterGroups.set(key, []);
+    clusterGroups.get(key)!.push(cafeteria.id);
+  });
+
+  positioned.forEach((cafeteria) => {
+    const baseLeft = 18 + ((cafeteria.location.lng! - minLng) / lngSpan) * 64;
+    const baseTop =
+      positioned.length === 1
+        ? 52
+        : 78 - ((cafeteria.location.lat! - minLat) / latSpan) * 56;
+
+    const normLng = (cafeteria.location.lng! - minLng) / lngSpan;
+    const normLat = (cafeteria.location.lat! - minLat) / latSpan;
+    const key = `${Math.round(normLng / CLUSTER_THRESHOLD_PCT)},${Math.round(normLat / CLUSTER_THRESHOLD_PCT)}`;
+    const cluster = clusterGroups.get(key)!;
+    const clusterIndex = cluster.indexOf(cafeteria.id);
+    const clusterSize = cluster.length;
+
+    // Spread overlapping pins in a circle with 14% radius
+    const angle = clusterSize > 1 ? (clusterIndex / clusterSize) * 2 * Math.PI - Math.PI / 2 : 0;
+    const radius = clusterSize > 1 ? 4 : 0;
+
     positions.set(cafeteria.id, {
-      left: 18 + ((cafeteria.location.lng! - minLng) / lngSpan) * 64,
-      top:
-        positioned.length === 1
-          ? 52
-          : 78 - ((cafeteria.location.lat! - minLat) / latSpan) * 56 + (index % 2) * 2,
+      left: baseLeft + radius * Math.cos(angle),
+      top: baseTop + radius * Math.sin(angle),
     });
   });
 

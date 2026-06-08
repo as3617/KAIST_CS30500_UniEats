@@ -202,12 +202,8 @@ export class AnalyticsService {
   private scoreExpression() {
     return {
       $multiply: [
-        "$averageRating",
-        {
-          $ln: {
-            $add: ["$cappedPositiveReviewCount", 1],
-          },
-        },
+        { $multiply: ["$averageRating", "$averageRating"] },
+        { $ln: { $add: ["$cappedPositiveReviewCount", 1] } },
       ],
     };
   }

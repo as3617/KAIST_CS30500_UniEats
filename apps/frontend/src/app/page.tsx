@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -28,10 +27,6 @@ export default function HomePage() {
       <Card>
         <CardHeader>
           <CardTitle>Start exploring</CardTitle>
-          <CardDescription>
-            Pick a destination to see the frontend skeleton in action. The mock
-            API is enabled by default in development.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <Button asChild>
