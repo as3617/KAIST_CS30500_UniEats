@@ -155,6 +155,11 @@ export function MenuServingDetailView({
   const isHidden = serving.status === "HIDDEN";
   const statusLabel = isSoldOut ? "Sold out" : isHidden ? "Hidden" : "Available";
   const hasAllergyConflict = serving.allergyWarning?.hasConflict ?? false;
+  const activeDiscount =
+    serving.activeDiscount &&
+    serving.activeDiscount.discountedPrice < serving.price
+      ? serving.activeDiscount
+      : null;
   const location = [serving.cafeteria.location.building, serving.cafeteria.location.floor]
     .filter(Boolean)
     .join(" ");
@@ -188,6 +193,11 @@ export function MenuServingDetailView({
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {activeDiscount ? (
+                <Badge variant="outline" className="border-primary/40 text-primary">
+                  Promo
+                </Badge>
+              ) : null}
               <Badge variant={isSoldOut ? "destructive" : isHidden ? "outline" : "secondary"}>
                 {statusLabel}
               </Badge>
@@ -200,7 +210,20 @@ export function MenuServingDetailView({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <span className="font-semibold text-foreground">{formatPriceKRW(serving.price)}</span>
+            {activeDiscount ? (
+              <span className="flex items-baseline gap-2">
+                <span className="text-base font-semibold text-primary">
+                  {formatPriceKRW(activeDiscount.discountedPrice)}
+                </span>
+                <span className="text-xs line-through">
+                  {formatPriceKRW(serving.price)}
+                </span>
+              </span>
+            ) : (
+              <span className="font-semibold text-foreground">
+                {formatPriceKRW(serving.price)}
+              </span>
+            )}
             <span>{MEAL_TIME_LABELS[serving.mealTime]}</span>
             <span>
               {serving.averageRating.toFixed(1)} / 5 ({serving.verifiedReviewCount} verified)

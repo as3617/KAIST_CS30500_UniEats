@@ -90,6 +90,13 @@ type MenuCreateForm = {
   status: MenuServingStatus;
 };
 
+type DiscountForm = {
+  cafeteriaId: string;
+  menuServingId: string;
+  discountedPrice: string;
+  validUntil: string;
+};
+
 function createInitialMenuForm(date: string): MenuCreateForm {
   return {
     name: "",
@@ -111,6 +118,15 @@ function createInitialMenuForm(date: string): MenuCreateForm {
   };
 }
 
+function createInitialDiscountForm(cafeteriaId = ""): DiscountForm {
+  return {
+    cafeteriaId,
+    menuServingId: "",
+    discountedPrice: "",
+    validUntil: "",
+  };
+}
+
 export function ManagerView() {
   const today = useMemo(() => todayInSeoul(), []);
   const [user, setUser] = useState<Pick<User, "nickname" | "role"> | null>(null);
@@ -129,17 +145,22 @@ export function ManagerView() {
   const [success, setSuccess] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"operations" | "discounts">("operations");
   const [discounts, setDiscounts] = useState<Discount[]>([]);
-  const [discountForm, setDiscountForm] = useState({
-    cafeteriaName: "",
-    menuName: "",
-    discountedPrice: "",
-    menuServingId: "",
-    validUntil: "",
-  });
+  const [discountForm, setDiscountForm] = useState<DiscountForm>(() =>
+    createInitialDiscountForm(),
+  );
+  const [promotionMenuServings, setPromotionMenuServings] = useState<MenuServing[]>([]);
+  const [isPromotionMenusLoading, setIsPromotionMenusLoading] = useState(false);
   const [isDiscountSaving, setIsDiscountSaving] = useState(false);
 
+  const canManagePromotions = user?.role === "ADMIN" || user?.role === "MANAGER";
   const selectedCafeteria = cafeterias.find(
     (cafeteria) => cafeteria.id === selectedCafeteriaId,
+  );
+  const selectedPromotionCafeteria = cafeterias.find(
+    (cafeteria) => cafeteria.id === discountForm.cafeteriaId,
+  );
+  const selectedPromotionServing = promotionMenuServings.find(
+    (serving) => serving.id === discountForm.menuServingId,
   );
   const stats = useMemo(() => buildStats(servings, reviews), [servings, reviews]);
 
@@ -174,6 +195,7 @@ export function ManagerView() {
           }
           setCafeterias([managedCafeteriaToOption(managed)]);
           setSelectedCafeteriaId(managed.cafeteriaId);
+          setDiscountForm(createInitialDiscountForm(managed.cafeteriaId));
           setIsCafeteriaLocked(true);
           return;
         }
@@ -183,6 +205,7 @@ export function ManagerView() {
           if (!isCurrent) return;
           setCafeterias(data);
           setSelectedCafeteriaId(data[0]?.id ?? "");
+          setDiscountForm(createInitialDiscountForm(data[0]?.id ?? ""));
           setIsCafeteriaLocked(false);
           if (data.length === 0) {
             setIsLoading(false);
@@ -387,11 +410,52 @@ export function ManagerView() {
   }
 
   useEffect(() => {
-    if (user?.role !== "ADMIN") return;
+    if (!canManagePromotions) return;
     api.get<Discount[]>("/discounts", { query: { admin: "true" } })
       .then(setDiscounts)
       .catch(() => setDiscounts([]));
-  }, [user?.role]);
+  }, [canManagePromotions]);
+
+  useEffect(() => {
+    if (!canManagePromotions || !discountForm.cafeteriaId) {
+      setPromotionMenuServings([]);
+      return;
+    }
+
+    let isCurrent = true;
+    setIsPromotionMenusLoading(true);
+
+    api.get<PaginatedData<MenuServing>>("/menu-servings", {
+      query: {
+        cafeteriaId: discountForm.cafeteriaId,
+        limit: 100,
+      },
+    })
+      .then((data) => {
+        if (!isCurrent) return;
+        setPromotionMenuServings(data.items);
+        setDiscountForm((current) => ({
+          ...current,
+          menuServingId: data.items.some((serving) => serving.id === current.menuServingId)
+            ? current.menuServingId
+            : data.items[0]?.id ?? "",
+        }));
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setPromotionMenuServings([]);
+        setDiscountForm((current) => ({ ...current, menuServingId: "" }));
+      })
+      .finally(() => {
+        if (isCurrent) {
+          setIsPromotionMenusLoading(false);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [canManagePromotions, discountForm.cafeteriaId]);
 
   async function createDiscount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -400,18 +464,25 @@ export function ManagerView() {
       setError("Discounted price must be a non-negative number.");
       return;
     }
+    if (!discountForm.cafeteriaId || !discountForm.menuServingId) {
+      setError("Select a cafeteria and menu before adding a promotion.");
+      return;
+    }
     setIsDiscountSaving(true);
     setError(null);
     try {
       const created = await api.post<Discount>("/discounts", {
-        cafeteriaName: discountForm.cafeteriaName,
-        menuName: discountForm.menuName,
+        cafeteriaId: discountForm.cafeteriaId,
+        menuServingId: discountForm.menuServingId,
         discountedPrice: price,
-        menuServingId: discountForm.menuServingId.trim() || undefined,
         validUntil: new Date(discountForm.validUntil).toISOString(),
       });
       setDiscounts((current) => [created, ...current]);
-      setDiscountForm({ cafeteriaName: "", menuName: "", discountedPrice: "", menuServingId: "", validUntil: "" });
+      setDiscountForm((current) => ({
+        ...current,
+        discountedPrice: "",
+        validUntil: "",
+      }));
       setSuccess("Discount created.");
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to create discount");
@@ -455,7 +526,7 @@ export function ManagerView() {
         </Button>
       </header>
 
-      {user?.role === "ADMIN" && (
+      {canManagePromotions && (
         <div className="flex gap-1 rounded-lg border bg-muted/40 p-1 w-fit">
           <button
             type="button"
@@ -482,7 +553,7 @@ export function ManagerView() {
         </div>
       )}
 
-      {(activeTab === "operations" || user?.role !== "ADMIN") && (<>
+      {(activeTab === "operations" || !canManagePromotions) && (<>
       {user?.role !== "MANAGER" && user?.role !== "ADMIN" ? (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="flex gap-3 p-4 text-sm">
@@ -614,7 +685,7 @@ export function ManagerView() {
       )}
       </>)}
 
-      {activeTab === "discounts" && user?.role === "ADMIN" && (
+      {activeTab === "discounts" && canManagePromotions && (
         <section className="space-y-4">
           <Card>
             <CardHeader>
@@ -623,26 +694,63 @@ export function ManagerView() {
             <CardContent>
               <form onSubmit={createDiscount} className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="d-cafeteria">Cafeteria name</Label>
-                  <Input
+                  <Label htmlFor="d-cafeteria">Cafeteria</Label>
+                  <select
                     id="d-cafeteria"
-                    value={discountForm.cafeteriaName}
-                    onChange={(e) => setDiscountForm((f) => ({ ...f, cafeteriaName: e.target.value }))}
-                    placeholder="West Cafeteria"
+                    value={discountForm.cafeteriaId}
+                    onChange={(event) =>
+                      setDiscountForm((current) => ({
+                        ...current,
+                        cafeteriaId: event.target.value,
+                        menuServingId: "",
+                      }))
+                    }
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     required
-                    disabled={isDiscountSaving}
-                  />
+                    disabled={isDiscountSaving || isCafeteriaLocked}
+                  >
+                    {cafeterias.map((cafeteria) => (
+                      <option key={cafeteria.id} value={cafeteria.id}>
+                        {cafeteria.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="d-menu">Menu name</Label>
-                  <Input
+                  <Label htmlFor="d-menu">Menu</Label>
+                  <select
                     id="d-menu"
-                    value={discountForm.menuName}
-                    onChange={(e) => setDiscountForm((f) => ({ ...f, menuName: e.target.value }))}
-                    placeholder="Bulgogi Rice Set"
+                    value={discountForm.menuServingId}
+                    onChange={(event) =>
+                      setDiscountForm((current) => ({
+                        ...current,
+                        menuServingId: event.target.value,
+                      }))
+                    }
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     required
-                    disabled={isDiscountSaving}
-                  />
+                    disabled={
+                      isDiscountSaving ||
+                      isPromotionMenusLoading ||
+                      promotionMenuServings.length === 0
+                    }
+                  >
+                    {promotionMenuServings.map((serving) => (
+                      <option key={serving.id} value={serving.id}>
+                        {serving.meal.name} - {MEAL_TIME_LABELS[serving.mealTime]} -{" "}
+                        {serving.date} - {formatPriceKRW(serving.price)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    {isPromotionMenusLoading
+                      ? "Loading menus..."
+                      : promotionMenuServings.length === 0
+                        ? "No menu servings are available for this cafeteria."
+                        : selectedPromotionServing
+                          ? `${selectedPromotionCafeteria?.name ?? "Cafeteria"} menu selected.`
+                          : "Select a menu to promote."}
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="d-price">Promotional price (₩)</Label>
@@ -658,16 +766,6 @@ export function ManagerView() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="d-serving">Menu Serving ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                  <Input
-                    id="d-serving"
-                    value={discountForm.menuServingId}
-                    onChange={(e) => setDiscountForm((f) => ({ ...f, menuServingId: e.target.value }))}
-                    placeholder="Paste from menu serving URL"
-                    disabled={isDiscountSaving}
-                  />
-                </div>
-                <div className="space-y-1.5">
                   <Label htmlFor="d-until">Valid until</Label>
                   <Input
                     id="d-until"
@@ -679,7 +777,15 @@ export function ManagerView() {
                   />
                 </div>
                 <div className="sm:col-span-2 flex justify-end">
-                  <Button type="submit" size="sm" disabled={isDiscountSaving}>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={
+                      isDiscountSaving ||
+                      !discountForm.cafeteriaId ||
+                      !discountForm.menuServingId
+                    }
+                  >
                     <Plus className="h-4 w-4" />
                     {isDiscountSaving ? "Adding..." : "Add promotion"}
                   </Button>

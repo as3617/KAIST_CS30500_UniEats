@@ -46,6 +46,29 @@ const ALLERGY_BY_NUMBER: Record<string, AllergyCode> = {
   "19": AllergyCode.PINE_NUT,
 };
 
+const DAILY_MENU_DEFAULT_PRICES: Record<string, Partial<Record<MealTime, number>>> = {
+  fclt: {
+    [MealTime.BREAKFAST]: 3500,
+    [MealTime.LUNCH]: 5500,
+    [MealTime.DINNER]: 5500,
+  },
+  west: {
+    [MealTime.BREAKFAST]: 3700,
+    [MealTime.LUNCH]: 5000,
+    [MealTime.DINNER]: 5000,
+  },
+  icc: {
+    [MealTime.BREAKFAST]: 3700,
+    [MealTime.LUNCH]: 5500,
+    [MealTime.DINNER]: 5500,
+  },
+  hawam: {
+    [MealTime.BREAKFAST]: 3700,
+    [MealTime.LUNCH]: 5500,
+    [MealTime.DINNER]: 5500,
+  },
+};
+
 type DocumentWithId = { _id: Types.ObjectId };
 
 type ParsedMenuItem = {
@@ -194,33 +217,42 @@ export function parseKaistDailyMenuPage(
 
   return cells.flatMap((lines, cellIndex) => {
     const mealTime = mealTimeFromHeader(headers[cellIndex] ?? "");
-    return splitMenuSections(lines, mealTimeLabel(mealTime)).map((section, sectionIndex) => {
-      const cleanedItems = cleanMenuItems(section.items);
-      const name = buildMealName(source.menuNamePrefix, date, mealTime, section.label, cleanedItems);
-      const ingredients = extractIngredients(cleanedItems);
-      const allergens = extractAllergens(cleanedItems);
-
-      return {
-        date,
-        mealTime,
-        sectionLabel: section.label,
-        name,
-        description: cleanedItems.join(" / "),
-        category: inferCategory(cleanedItems),
-        price: section.price,
-        ingredients,
-        allergens,
-        sourceUrl,
-        sourceExternalKey: [
-          "kaist",
-          source.dvsCd,
+    const fallbackPrice = defaultDailyMenuPrice(source, mealTime);
+    return splitMenuSections(lines, mealTimeLabel(mealTime), fallbackPrice).map(
+      (section, sectionIndex) => {
+        const cleanedItems = cleanMenuItems(section.items);
+        const name = buildMealName(
+          source.menuNamePrefix,
           date,
-          mealTime.toLowerCase(),
-          slugify(section.label),
-          String(sectionIndex + 1),
-        ].join(":"),
-      };
-    });
+          mealTime,
+          section.label,
+          cleanedItems,
+        );
+        const ingredients = extractIngredients(cleanedItems);
+        const allergens = extractAllergens(cleanedItems);
+
+        return {
+          date,
+          mealTime,
+          sectionLabel: section.label,
+          name,
+          description: cleanedItems.join(" / "),
+          category: inferCategory(cleanedItems),
+          price: section.price,
+          ingredients,
+          allergens,
+          sourceUrl,
+          sourceExternalKey: [
+            "kaist",
+            source.dvsCd,
+            date,
+            mealTime.toLowerCase(),
+            slugify(section.label),
+            String(sectionIndex + 1),
+          ].join(":"),
+        };
+      },
+    );
   });
 }
 
@@ -360,7 +392,7 @@ function buildDailyMenuUrl(dvsCd: string, date: string) {
   return `${KAIST_MENU_BASE_URL}?dvs_cd=${encodeURIComponent(dvsCd)}&stt_dt=${encodeURIComponent(date)}`;
 }
 
-function splitMenuSections(lines: string[], fallbackLabel: string) {
+function splitMenuSections(lines: string[], fallbackLabel: string, fallbackPrice: number) {
   const sections: Array<{ label: string; price: number; items: string[] }> = [];
   let current: { label: string; price: number; items: string[] } | null = null;
 
@@ -397,9 +429,20 @@ function splitMenuSections(lines: string[], fallbackLabel: string) {
 
   return sections.map((section) => ({
     ...section,
-    price: section.price || inferPrice(section.items),
+    price: resolveDailyMenuPrice(section, fallbackPrice),
     items: section.items.filter((item) => parsePriceOnly(item) === null),
   }));
+}
+
+function resolveDailyMenuPrice(
+  section: { label: string; price: number; items: string[] },
+  fallbackPrice: number,
+) {
+  if (section.label.includes("천원의 아침밥") && fallbackPrice > 0) {
+    return fallbackPrice;
+  }
+
+  return section.price || inferPrice(section.items) || fallbackPrice;
 }
 
 function parseSectionHeading(line: string) {
@@ -429,6 +472,10 @@ function inferPrice(items: string[]) {
     }
   }
   return 0;
+}
+
+function defaultDailyMenuPrice(source: DailyMenuSourceSeed, mealTime: MealTime) {
+  return DAILY_MENU_DEFAULT_PRICES[source.dvsCd]?.[mealTime] ?? 0;
 }
 
 function htmlCellToLines(html: string) {

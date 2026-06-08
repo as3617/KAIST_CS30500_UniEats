@@ -9,6 +9,7 @@ import { Cafeteria, CafeteriaSchema } from "../cafeterias/schemas/cafeteria.sche
 import { Favorite, FavoriteSchema } from "../favorites/schemas/favorite.schema";
 import { Meal, MealSchema } from "../meals/schemas/meal.schema";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { Discount, DiscountSchema } from "../discounts/schemas/discount.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { ViewHistoriesModule } from "../view-histories/view-histories.module";
 import { MenuServingEventsService } from "./menu-serving-events.service";
@@ -28,6 +29,7 @@ import { MenuServing, MenuServingSchema } from "./schemas/menu-serving.schema";
       { name: User.name, schema: UserSchema },
       { name: CafeteriaManager.name, schema: CafeteriaManagerSchema },
       { name: Favorite.name, schema: FavoriteSchema },
+      { name: Discount.name, schema: DiscountSchema },
     ]),
   ],
   controllers: [MenuServingsController],

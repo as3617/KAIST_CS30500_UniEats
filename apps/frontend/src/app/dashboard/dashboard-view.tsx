@@ -63,8 +63,8 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [weeklyBest, setWeeklyBest] = useState<WeeklyBestItem[]>([]);
   const [cafeteriaRanking, setCafeteriaRanking] = useState<CafeteriaRankItem[]>([]);
-  const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [isInsightsLoading, setIsInsightsLoading] = useState(true);
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [cafeterias, setCafeterias] = useState<Cafeteria[]>([]);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -175,19 +175,18 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
       api.get<CafeteriaRankItem[]>("/analytics/cafeteria-ranking", {
         query: { limit: 3 },
       }),
-      api.get<Discount[]>("/discounts"),
+      api.get<Discount[]>("/discounts").catch(() => [] as Discount[]),
     ])
-      .then(([bestItems, rankings, discountItems]) => {
+      .then(([bestItems, rankings, activeDiscounts]) => {
         if (!isCurrent) return;
         setWeeklyBest(bestItems);
         setCafeteriaRanking(rankings);
-        setDiscounts(discountItems);
+        setDiscounts(activeDiscounts);
       })
       .catch(() => {
         if (!isCurrent) return;
         setWeeklyBest([]);
         setCafeteriaRanking([]);
-        setDiscounts([]);
       })
       .finally(() => {
         if (isCurrent) setIsInsightsLoading(false);
@@ -378,7 +377,6 @@ export function DashboardView({ initialCafeteriaId = "" }: DashboardViewProps) {
           </CardContent>
         </Card>
       )}
-
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
           <div className="space-y-1">
