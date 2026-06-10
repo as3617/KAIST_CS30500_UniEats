@@ -438,10 +438,6 @@ function resolveDailyMenuPrice(
   section: { label: string; price: number; items: string[] },
   fallbackPrice: number,
 ) {
-  if (section.label.includes("천원의 아침밥") && fallbackPrice > 0) {
-    return fallbackPrice;
-  }
-
   return section.price || inferPrice(section.items) || fallbackPrice;
 }
 

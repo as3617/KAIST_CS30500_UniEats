@@ -8,11 +8,13 @@ import {
   BriefcaseBusiness,
   ChevronRight,
   Heart,
+  Leaf,
   LogOut,
   Save,
   ShieldAlert,
   Star,
   Trash2,
+  Utensils,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -222,7 +224,6 @@ export function ProfileView() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Account</CardTitle>
-            <CardDescription>Your public display name on reviews.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="max-w-sm space-y-2">
@@ -250,9 +251,6 @@ export function ProfileView() {
               <ShieldAlert className="h-4 w-4 text-destructive" />
               Allergy warnings
             </CardTitle>
-            <CardDescription>
-              Select ingredients that should be highlighted when present in a meal.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <CheckboxGrid
@@ -267,10 +265,10 @@ export function ProfileView() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Dietary options</CardTitle>
-            <CardDescription>
-              Save the meal labels you prefer to look for while browsing.
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Leaf className="h-4 w-4 text-green-500" />
+              Dietary options
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <CheckboxGrid
@@ -285,10 +283,10 @@ export function ProfileView() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Ingredient preferences</CardTitle>
-            <CardDescription>
-              Enter ingredients separated by commas. These can support future ranking and filters.
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Utensils className="h-4 w-4 text-muted-foreground" />
+              Ingredient preferences
+            </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -385,9 +383,6 @@ function FavoriteMealsCard({
           <Heart className="h-4 w-4 text-primary" />
           Favorite meals
         </CardTitle>
-        <CardDescription>
-          Saved meals receive menu status notifications when they appear on campus menus.
-        </CardDescription>
       </CardHeader>
       <CardContent>
         {error ? (

@@ -186,7 +186,9 @@ export function MenuServingCard({
 
 function buildMenuServingCardTitle(serving: MenuServing) {
   if (serving.source === "DAILY_MENU") {
-    return `${serving.cafeteria.name} - ${DAILY_MENU_TIME_LABELS[serving.mealTime]} - ${serving.date}`;
+    const timeLabel = DAILY_MENU_TIME_LABELS[serving.mealTime];
+    const { prefix, section } = parseDailyMenuName(serving, timeLabel);
+    return `${prefix || serving.cafeteria.name} ${timeLabel} - ${section || "일반 메뉴"}`;
   }
 
   return serving.meal.name;
@@ -194,8 +196,26 @@ function buildMenuServingCardTitle(serving: MenuServing) {
 
 function buildMenuServingCardDescription(serving: MenuServing) {
   if (serving.source === "DAILY_MENU") {
-    return CATEGORY_LABELS[serving.meal.category];
+    return `${serving.cafeteria.name} · ${DAILY_MENU_TIME_LABELS[serving.mealTime]} · ${serving.date} · ${CATEGORY_LABELS[serving.meal.category]}`;
   }
 
   return `${serving.cafeteria.name} · ${CATEGORY_LABELS[serving.meal.category]}`;
+}
+
+function parseDailyMenuName(serving: MenuServing, timeLabel: string) {
+  const nameWithoutItems = serving.meal.name.split(" - ")[0]?.trim() ?? "";
+  const dateSuffix = ` ${serving.date}`;
+  const nameWithoutDate = nameWithoutItems.endsWith(dateSuffix)
+    ? nameWithoutItems.slice(0, -dateSuffix.length).trim()
+    : nameWithoutItems;
+  const timeIndex = nameWithoutDate.lastIndexOf(` ${timeLabel}`);
+
+  if (timeIndex === -1) {
+    return { prefix: serving.cafeteria.name, section: "" };
+  }
+
+  return {
+    prefix: nameWithoutDate.slice(0, timeIndex).trim(),
+    section: nameWithoutDate.slice(timeIndex + timeLabel.length + 1).trim(),
+  };
 }

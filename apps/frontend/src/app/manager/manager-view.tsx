@@ -519,10 +519,6 @@ export function ManagerView() {
           <h1 className="text-3xl font-semibold tracking-tight">
             Cafeteria operations
           </h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Update today&apos;s menu availability, monitor verified feedback, and
-            respond to diners from one dashboard.
-          </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={fetchManagerData}>
           <RefreshCw className="h-4 w-4" />

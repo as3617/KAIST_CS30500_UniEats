@@ -28,11 +28,11 @@ const signInTab: Tab = { href: "/login", icon: LogIn };
 function getActiveTab(pathname: string): string {
   if (pathname.startsWith("/campus-map")) return "/campus-map";
   if (pathname.startsWith("/search")) return "/search";
-  if (pathname.startsWith("/help")) return "/help";
   if (pathname.startsWith("/notifications")) return "/notifications";
   if (pathname.startsWith("/my-page")) return "/my-page";
   if (pathname.startsWith("/login")) return "/login";
-  return "/dashboard";
+  if (pathname === "/dashboard" || pathname === "/") return "/dashboard";
+  return "";
 }
 
 export function BottomTabBar() {

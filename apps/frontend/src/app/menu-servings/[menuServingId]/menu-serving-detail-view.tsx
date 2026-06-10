@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ArrowLeft, MapPin } from "lucide-react";
 
 import { FavoriteMealButton } from "@/components/favorite-meal-button";
+import { StarRating } from "@/components/menu-serving-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +28,7 @@ import {
   DIETARY_LABELS,
   MEAL_TIME_LABELS,
 } from "@/types";
-import type { MenuServingDetail, User } from "@/types";
+import type { MenuServingDetail, PaginatedData, Review, User } from "@/types";
 
 type MenuServingDetailViewProps = {
   menuServingId: string;
@@ -45,6 +46,7 @@ export function MenuServingDetailView({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  const [previewReviews, setPreviewReviews] = useState<Review[]>([]);
   const {
     favoriteMealIds,
     pendingMealIds: pendingFavoriteMealIds,
@@ -80,6 +82,15 @@ export function MenuServingDetailView({
     return () => {
       isCurrent = false;
     };
+  }, [menuServingId]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    api
+      .get<PaginatedData<Review>>(`/menu-servings/${menuServingId}/reviews`, { query: { limit: 3 } })
+      .then((data) => { if (isCurrent) setPreviewReviews(data.items); })
+      .catch(() => {});
+    return () => { isCurrent = false; };
   }, [menuServingId]);
 
   const handleMenuServingStatusUpdate = useCallback(
@@ -306,12 +317,41 @@ export function MenuServingDetailView({
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <Link href={`/menu-servings/${menuServingId}/reviews/new`}>
-              Write a Review
-            </Link>
-          </Button>
+        <CardContent className="space-y-4">
+          {previewReviews.length > 0 ? (
+            <ul className="space-y-3">
+              {previewReviews.map((review) => (
+                <li key={review.id} className="border-b pb-3 last:border-b-0 last:pb-0 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <StarRating rating={review.rating} />
+                    <span className="text-xs text-muted-foreground">
+                      {review.reviewerDisplayName ?? "Masked reviewer"}
+                    </span>
+                    {review.isVerified && (
+                      <Badge variant="secondary" className="text-xs">Verified</Badge>
+                    )}
+                  </div>
+                  {review.content && (
+                    <p className="text-sm line-clamp-2">{review.content}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No reviews yet.</p>
+          )}
+          <div className="flex items-center gap-3 pt-1">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/menu-servings/${menuServingId}/reviews`}>
+                View all {serving.verifiedReviewCount > 0 ? `${serving.verifiedReviewCount} ` : ""}reviews
+              </Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link href={`/menu-servings/${menuServingId}/reviews/new`}>
+                Write a Review
+              </Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -322,10 +362,10 @@ export function MenuServingDetailView({
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           {location ? (
-            <p className="flex items-center gap-2">
+            <Link href="/campus-map" className="flex items-center gap-2 hover:text-primary transition-colors">
               <MapPin className="h-4 w-4 text-muted-foreground" />
               {location}
-            </p>
+            </Link>
           ) : null}
           {serving.cafeteria.description ? (
             <p className="text-muted-foreground">{serving.cafeteria.description}</p>

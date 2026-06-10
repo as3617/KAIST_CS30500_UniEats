@@ -3,7 +3,7 @@
 // handlers (NEXT_PUBLIC_USE_MOCK=true) or to the NestJS backend.
 
 import { authStorage } from "./auth-storage";
-import type { ApiResponse } from "@/types";
+import type { ApiResponse, AuthTokens } from "@/types";
 
 export class ApiClientError extends Error {
   readonly code: string;
@@ -40,9 +40,44 @@ function buildUrl(path: string, query?: RequestOptions["query"]) {
   return qs ? `${url}?${qs}` : url;
 }
 
+let _isRefreshing = false;
+let _refreshPromise: Promise<void> | null = null;
+
+async function tryRefreshToken(): Promise<void> {
+  if (_isRefreshing) return _refreshPromise!;
+  const refreshToken = authStorage.getRefreshToken();
+  if (!refreshToken) {
+    authStorage.clear();
+    return;
+  }
+  _isRefreshing = true;
+  _refreshPromise = fetch(buildUrl("/auth/refresh"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  })
+    .then(async (res) => {
+      const payload = (await res.json()) as ApiResponse<AuthTokens>;
+      if (payload.success) {
+        authStorage.setTokens(payload.data);
+      } else {
+        authStorage.clear();
+      }
+    })
+    .catch(() => {
+      authStorage.clear();
+    })
+    .finally(() => {
+      _isRefreshing = false;
+      _refreshPromise = null;
+    });
+  return _refreshPromise;
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestOptions = {},
+  _isRetry = false,
 ): Promise<T> {
   const { body, headers = {}, query, anonymous, ...rest } = options;
 
@@ -72,6 +107,14 @@ export async function apiFetch<T>(
           ? body
           : JSON.stringify(body),
   });
+
+  // Auto-refresh on 401, then retry once
+  if (response.status === 401 && !anonymous && !_isRetry) {
+    await tryRefreshToken();
+    if (authStorage.getAccessToken()) {
+      return apiFetch<T>(path, options, true);
+    }
+  }
 
   // We do not try to recover from non-JSON responses; the contract guarantees
   // a JSON envelope on both success and error paths.
